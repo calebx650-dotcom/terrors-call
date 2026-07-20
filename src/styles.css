@@ -1,0 +1,154 @@
+@font-face {
+  font-family: "TerrorMono";
+  src: local("Courier New");
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: "TerrorMono", "Courier New", monospace;
+  color: #e8e2d5;
+}
+
+#game-container {
+  position: fixed;
+  inset: 0;
+}
+
+#game-container canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: radial-gradient(ellipse at center, rgba(10, 8, 8, 0.75) 0%, rgba(0,0,0,0.94) 100%);
+  z-index: 20;
+  letter-spacing: 0.03em;
+}
+
+.overlay h1 {
+  font-size: 3.2rem;
+  margin: 0 0 0.4rem;
+  color: #b91f1f;
+  text-shadow: 0 0 18px rgba(185, 31, 31, 0.55);
+  letter-spacing: 0.15em;
+}
+
+.overlay p {
+  max-width: 34rem;
+  line-height: 1.6;
+  color: #c8c2b4;
+  font-size: 0.95rem;
+}
+
+.overlay button {
+  margin-top: 1.6rem;
+  padding: 0.8rem 2.2rem;
+  background: transparent;
+  border: 1px solid #7a1f1f;
+  color: #e8e2d5;
+  font-family: inherit;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.overlay button:hover {
+  background: #7a1f1f;
+  color: #fff;
+}
+
+.controls-hint {
+  margin-top: 2.2rem;
+  font-size: 0.75rem;
+  color: #756f63;
+  line-height: 1.8;
+}
+
+.crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(232, 226, 213, 0.55);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.interaction-prompt {
+  position: fixed;
+  bottom: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(232, 226, 213, 0.25);
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.subtitle-box {
+  position: fixed;
+  bottom: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(680px, 82vw);
+  text-align: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.subtitle-speaker {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #b91f1f;
+  margin-bottom: 0.3rem;
+}
+
+.subtitle-text {
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: #f1ede2;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: inset 0 0 18vw 4vw rgba(0, 0, 0, 0.85);
+}
+
+.phase-tag {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  color: #756f63;
+  z-index: 10;
+  text-transform: uppercase;
+}
