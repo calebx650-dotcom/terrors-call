@@ -19,6 +19,12 @@ export class PlayerController {
   private footstepTimer = 0;
   onFootstep: (() => void) | null = null;
 
+  private shakeTime = 0;
+  private shakeDuration = 0;
+  private shakeIntensity = 0;
+  /** When false, WASD input is ignored (scripted/vehicle sequences) while look is still free. */
+  movementEnabled = true;
+
   constructor(
     camera: THREE.PerspectiveCamera,
     domElement: HTMLElement,
@@ -69,7 +75,17 @@ export class PlayerController {
     this.yaw = yaw;
   }
 
+  /** Kicks off a decaying random camera jolt — used for the ambulance impact. */
+  triggerShake(intensity: number, duration: number) {
+    this.shakeIntensity = intensity;
+    this.shakeDuration = duration;
+    this.shakeTime = duration;
+  }
+
   update(dt: number) {
+    if (!this.movementEnabled) {
+      this.keys = {};
+    }
     const forward = new THREE.Vector3(
       Math.sin(this.yaw),
       0,
@@ -126,6 +142,15 @@ export class PlayerController {
     this.camera.rotation.set(0, 0, 0);
     this.camera.rotateY(this.yaw);
     this.camera.rotateX(this.pitch);
+
+    if (this.shakeTime > 0) {
+      this.shakeTime -= dt;
+      const falloff = Math.max(0, this.shakeTime / this.shakeDuration);
+      const mag = this.shakeIntensity * falloff;
+      this.camera.position.x += (Math.random() - 0.5) * mag;
+      this.camera.position.y += (Math.random() - 0.5) * mag;
+      this.camera.rotateZ((Math.random() - 0.5) * mag * 0.6);
+    }
   }
 
   get isLocked() {

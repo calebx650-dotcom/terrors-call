@@ -157,6 +157,23 @@ export class AudioManager {
     this.noiseBurst(1200, 6, 0.9, 0.12);
   }
 
+  radioStatic() {
+    this.noiseBurst(3500, 1.2, 0.4, 0.2);
+  }
+
+  /** Cardiac monitor blip; pitch/rate driven by the caller from the current BPM. */
+  monitorBeep(urgent = false) {
+    const osc = this.ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = urgent ? 1100 : 880;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(urgent ? 0.14 : 0.08, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+    osc.connect(gain).connect(this.master);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.13);
+  }
+
   stinger() {
     const osc = this.ctx.createOscillator();
     osc.type = "sawtooth";

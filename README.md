@@ -4,10 +4,14 @@ A browser-based first-person supernatural horror game about an EMT whose
 routine call goes very wrong. Built with React, Vite, TypeScript, and
 Three.js.
 
-This repository currently contains a **vertical slice**: Johnny and Archer
-arrive at a ruined house, explore it, and find their patient. See
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full technical design,
-system breakdown, and roadmap for the rest of the game.
+This repository currently contains a playable path from the house arrival
+through the ambulance crash: Johnny and Archer arrive at a ruined house,
+explore it, find and extract their patient, escape the house, load and drive
+the ambulance through an escalating 12-minute transport, and crash. See
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full technical design, system
+breakdown, and roadmap for the rest of the game (forest, monster, Archer's
+death — not yet built), and [`ASSETS.md`](./ASSETS.md) for the asset
+licensing policy and current (currently empty) external-asset inventory.
 
 ## Running locally
 

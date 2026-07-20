@@ -5,6 +5,10 @@ export type GamePhase =
   | "exterior_arrival"
   | "house_exploration"
   | "patient_found"
+  | "patient_extraction"
+  | "house_escape"
+  | "ambulance_interior"
+  | "transport"
   | "slice_end";
 
 interface SubtitleLine {

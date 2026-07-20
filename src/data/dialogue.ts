@@ -88,3 +88,94 @@ export const clueSymbolLines: DialogueLine[] = [
   },
   { speaker: "Archer", text: "Nobody asked you to like it. Keep moving." },
 ];
+
+// ---------- Phase 2: extraction, escape, ambulance, transport, crash ----------
+
+export const extractionStep1Lines: DialogueLine[] = [
+  { speaker: "Johnny", text: "Sir, I need you to squeeze my hand if you can hear me." },
+  { speaker: "Patient", text: "It's already listening. It doesn't need my hand." },
+  { speaker: "Archer", text: "Responsive to pain, not to command. Note it and move on." },
+];
+
+export const extractionStep2Lines: DialogueLine[] = [
+  { speaker: "Archer", text: "Straps across the chest and hips. Don't let him thrash off the edge." },
+  { speaker: "Johnny", text: "Okay — okay, sir, this is just to keep you safe, alright?" },
+  { speaker: "Patient", text: "Safe. That's a funny word for a man like you to use in here." },
+];
+
+export const extractionStep3Lines: DialogueLine[] = [
+  { speaker: "Archer", text: "On three. One, two—" },
+  { speaker: "Johnny", text: "Got him. God, he's lighter than he should be." },
+  { speaker: "Patient", text: "It weighs more than I do. It's been riding me for years." },
+];
+
+export const escapeDoorSlamLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "Did — did that door just close by itself?" },
+  { speaker: "Archer", text: "Wind. Old house, bad seals. Keep walking." },
+];
+
+export const escapeDistantSoundLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "That's the room we already cleared. Nobody's back there." },
+  { speaker: "Archer", text: "Then it's not our problem. Eyes forward." },
+];
+
+export const escapeQuietLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "It got quiet. Too quiet. I don't like that either." },
+];
+
+export const escapePatientReactsLines: DialogueLine[] = [
+  { speaker: "Patient", text: "It's right there. Can't you see it standing there?" },
+  { speaker: "Johnny", text: "There's nothing there, sir. There's nothing—" },
+  { speaker: "Archer", text: "Johnny. Door. Now." },
+];
+
+export const exitHouseLines: DialogueLine[] = [
+  { speaker: "Archer", text: "Outside. Finally. Get him loaded, I'll bring the truck around back." },
+  { speaker: "Johnny", text: "Never thought I'd be this happy to see a parking lot." },
+];
+
+export const loadAmbulanceLines: DialogueLine[] = [
+  { speaker: "Archer", text: "Stretcher locks into the mount. Make sure you hear it click." },
+  { speaker: "Johnny", text: "Clicked. We're good." },
+  { speaker: "Archer", text: "Get in back with him. I'll drive. Twelve minutes to the hospital." },
+];
+
+export const ambulanceInteriorIntroLines: DialogueLine[] = [
+  { speaker: "Archer", text: "Buckle up, kid. And holler if his numbers do something stupid." },
+  { speaker: "Johnny", text: "Define 'stupid.'" },
+  { speaker: "Archer", text: "You'll know it when you see it." },
+];
+
+export const transportCalmLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "Vitals are stable. He's just... murmuring. That's normal for him at this point, I guess." },
+  { speaker: "Patient", text: "It calls to me." },
+];
+
+export const transportRisingLines1: DialogueLine[] = [
+  { speaker: "Johnny", text: "Heart rate's climbing. One-ten and rising." },
+  { speaker: "Patient", text: "He wants my blood." },
+  { speaker: "Archer", text: "Keep an eye on it. Probably anxiety. Probably." },
+];
+
+export const transportRisingLines2: DialogueLine[] = [
+  { speaker: "Johnny", text: "Archer, the radio's doing something weird." },
+  { speaker: "Archer", text: "It does that out here. Dead zone." },
+  { speaker: "Patient", text: "Don't let it hear you." },
+];
+
+export const transportWindLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "Do you hear that? That's not the road." },
+  { speaker: "Archer", text: "I hear wind, Johnny. It's a windy night." },
+  { speaker: "Patient", text: "He's outside." },
+];
+
+export const transportPeakLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "Heart rate's one-fifty. Archer, something is wrong with him—" },
+  { speaker: "Patient", text: "No... no, no, no—" },
+  { speaker: "Johnny", text: "Archer, I see something out the back window—" },
+  { speaker: "Archer", text: "Hold onto something—" },
+];
+
+export const crashAftermathLines: DialogueLine[] = [
+  { speaker: "Johnny", text: "...Archer? Archer, are you—" },
+];

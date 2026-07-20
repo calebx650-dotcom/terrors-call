@@ -5,12 +5,12 @@ interface Props {
 export function EndScreen({ onRestart }: Props) {
   return (
     <div className="overlay">
-      <h1>END OF VERTICAL SLICE</h1>
+      <h1>JOHNNY LOSES CONSCIOUSNESS</h1>
       <p>
-        Johnny and Archer are about to move the patient. The house is not
-        finished with them yet — but the rest of the call, the ambulance, the
-        forest, and everything after is still ahead. Thanks for playing this
-        slice of Terror's Call.
+        Something hit the ambulance from the side. Johnny's vision goes dark
+        before he can make sense of it. What happens in the next two hours —
+        the forest, the wreck, and what's hunting through it — is still
+        ahead. Thanks for playing this build of Terror's Call.
       </p>
       <button onClick={onRestart}>Play Again</button>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { GameEngine } from "./engine/core/GameEngine";
 import { VerticalSliceScene } from "./scenes/VerticalSliceScene";
-import { useGameStore } from "./state/gameStore";
+import { GamePhase, useGameStore } from "./state/gameStore";
 import { StartScreen } from "./ui/StartScreen";
 import { EndScreen } from "./ui/EndScreen";
 import { Crosshair, InteractionPrompt, Subtitles, Vignette } from "./ui/Hud";
@@ -33,7 +33,7 @@ export default function App() {
     engineRef.current = engine;
 
     const scene = new VerticalSliceScene(engine, {
-      onPhaseChange: (p) => setPhase(p as any),
+      onPhaseChange: (p) => setPhase(p as GamePhase),
       onSliceComplete: () => {
         document.exitPointerLock?.();
       },
