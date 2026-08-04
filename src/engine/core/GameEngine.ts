@@ -74,13 +74,16 @@ export class GameEngine {
       this.callbacks.onSubtitle(speaker, text, id),
     );
 
-    this.player.onFootstep = () => this.audio.footstep();
+    this.player.onFootstep = (running) => this.audio.footstep(running);
+    this.player.onBreathState = (intensity) =>
+      this.audio.setBreathIntensity(intensity);
 
     window.addEventListener("resize", this.onResize);
     this.renderer.domElement.addEventListener("click", () => {
       if (!this.player.isLocked) this.player.requestLock();
     });
     window.addEventListener("keydown", this.onKeyDown);
+    window.addEventListener("keyup", this.onKeyUp);
   }
 
   addUpdateHook(fn: (dt: number) => void) {
@@ -88,11 +91,17 @@ export class GameEngine {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (e.code === "KeyE") {
-      this.interaction.tryInteract();
+    if (e.code === "KeyE" && !e.repeat) {
+      this.interaction.pressInteract();
     }
     if (e.code === "KeyF") {
       this.flashlight.toggle();
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    if (e.code === "KeyE") {
+      this.interaction.releaseInteract();
     }
   };
 
@@ -119,6 +128,7 @@ export class GameEngine {
     this.stop();
     window.removeEventListener("resize", this.onResize);
     window.removeEventListener("keydown", this.onKeyDown);
+    window.removeEventListener("keyup", this.onKeyUp);
     this.player.dispose();
     this.renderer.dispose();
     this.container.removeChild(this.renderer.domElement);
@@ -132,7 +142,7 @@ export class GameEngine {
     this.player.update(dt);
     this.flashlight.update(dt);
 
-    const hit = this.interaction.update();
+    const hit = this.interaction.update(dt);
     this.callbacks.onPrompt(hit ? hit.prompt : null);
 
     for (const hook of this.updateHooks) hook(dt);

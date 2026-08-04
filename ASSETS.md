@@ -1,5 +1,9 @@
 # Asset Inventory & Licensing Policy
 
+(This file serves the role the design brief calls `ASSET_LICENSES.md` —
+one ledger for every external asset's source, license, author, and
+attribution requirements.)
+
 ## Policy
 
 Before any external model, texture, audio sample, or font is added to this
@@ -12,6 +16,10 @@ project:
 4. Preserve any required attribution text here, verbatim, next to the asset.
 5. If the license is unclear or unverifiable, do not use the asset — find a
    substitute or build it procedurally instead.
+6. Never include ripped or copyrighted game content from any studio
+   (models, textures, sounds, characters, branding). Terror's Call is
+   *inspired by* late-90s survival horror; it must never *contain* another
+   developer's protected material.
 
 Every entry below must be added at the same time the asset is committed, not
 after. An asset with no entry here should be treated as unauthorized.
@@ -23,7 +31,7 @@ repository as of this writing is generated at runtime:
 
 | Category | Technique | Where |
 |---|---|---|
-| Geometry | Three.js primitives (Box/Sphere/Cylinder/Plane) composed into props/architecture | `src/scenes/VerticalSliceScene.ts`, `src/entities/LowPolyHuman.ts` |
+| Geometry | Three.js primitives (Box/Sphere/Cylinder/Plane) composed into props/architecture | `src/scenes/FarmhouseScene.ts`, `src/entities/ThePatient.ts` |
 | Color/albedo textures | Canvas 2D noise + procedural pattern drawing | `src/engine/materials/proceduralTextures.ts`, `src/engine/materials/materialKits.ts` |
 | Normal maps | Sobel-derived from procedurally generated height noise | `src/engine/materials/normalMap.ts` |
 | Roughness maps | Canvas grayscale noise | `src/engine/materials/materialKits.ts` |

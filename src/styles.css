@@ -81,18 +81,8 @@ html, body, #root {
   line-height: 1.8;
 }
 
-.crosshair {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: rgba(232, 226, 213, 0.55);
-  pointer-events: none;
-  z-index: 10;
-}
+/* No crosshair: the brief bans conventional HUD. The contextual prompt is
+   the only aiming feedback. */
 
 .interaction-prompt {
   position: fixed;
@@ -151,4 +141,221 @@ html, body, #root {
   color: #756f63;
   z-index: 10;
   text-transform: uppercase;
+}
+
+.tagline {
+  color: #8a92a8;
+  letter-spacing: 0.14em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.overlay button.secondary {
+  border-color: #4a4438;
+  color: #a9a294;
+  margin-top: 0.7rem;
+}
+
+.subtitle-toggle {
+  margin-top: 1.4rem;
+  font-size: 0.75rem;
+  color: #a9a294;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  cursor: pointer;
+}
+
+.fade-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 30;
+  transition: opacity 0.45s ease;
+}
+
+.hold-indicator {
+  position: fixed;
+  bottom: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 180px;
+  height: 5px;
+  background: rgba(232, 226, 213, 0.12);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hold-bar {
+  height: 100%;
+  background: rgba(200, 60, 50, 0.75);
+  transition: width 0.08s linear;
+}
+
+/* ---------- PCR clipboard ---------- */
+
+.pcr-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 15;
+}
+
+.pcr-sheet {
+  width: min(560px, 90vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  background: #d9d2bc;
+  color: #262218;
+  padding: 1.4rem 1.6rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.8);
+  transform: rotate(-0.6deg);
+}
+
+.pcr-header {
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  border-bottom: 2px solid #262218;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+
+.pcr-unit {
+  font-weight: normal;
+  font-size: 0.72rem;
+  color: #4c4535;
+  margin-top: 0.2rem;
+}
+
+.pcr-field {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.pcr-label {
+  flex: 0 0 9.5rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: #4c4535;
+  padding-top: 0.15rem;
+}
+
+.pcr-value {
+  flex: 1;
+  font-style: italic;
+}
+
+.pcr-empty {
+  color: #8a8064;
+}
+
+.pcr-divider {
+  margin: 0.7rem 0 0.4rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid #6b6350;
+  color: #4c4535;
+}
+
+.pcr-note {
+  font-style: italic;
+  margin-bottom: 0.25rem;
+}
+
+.pcr-objective {
+  margin-top: 1rem;
+  padding: 0.5rem 0.7rem;
+  border: 1.5px solid #7a2020;
+  color: #7a2020;
+  font-weight: bold;
+  font-style: italic;
+}
+
+.pcr-hint {
+  margin-top: 0.9rem;
+  text-align: center;
+  font-size: 0.65rem;
+  color: #6b6350;
+  letter-spacing: 0.1em;
+}
+
+/* ---------- jump bag ---------- */
+
+.bag-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 15;
+}
+
+.bag-panel {
+  width: min(620px, 92vw);
+  background: #2a2018;
+  border: 2px solid #4c3a26;
+  padding: 1.2rem 1.4rem;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.8);
+}
+
+.bag-title {
+  color: #cf4436;
+  letter-spacing: 0.2em;
+  font-size: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.bag-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+
+.bag-slot {
+  min-height: 92px;
+  background: #201811;
+  border: 1px solid #3c2e1e;
+  padding: 0.5rem;
+  font-size: 0.68rem;
+}
+
+.bag-slot.filled {
+  border-color: #6b5638;
+}
+
+.bag-item-name {
+  color: #e0d8c4;
+  margin-bottom: 0.3rem;
+  font-size: 0.72rem;
+}
+
+.bag-item-desc {
+  color: #94886f;
+  line-height: 1.4;
+}
+
+/* ---------- ending choice ---------- */
+
+.choice-overlay {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.choice-context {
+  max-width: 36rem;
+  font-style: italic;
+  color: #b8b0a0;
+}
+
+.choice-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
 }

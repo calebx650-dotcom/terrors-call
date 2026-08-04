@@ -1,20 +1,43 @@
+import { useGameStore } from "../state/gameStore";
+
 interface Props {
   onStart: () => void;
+  onContinue: (() => void) | null;
 }
 
-export function StartScreen({ onStart }: Props) {
+export function StartScreen({ onStart, onContinue }: Props) {
+  const subtitlesEnabled = useGameStore((s) => s.subtitlesEnabled);
+  const setSubtitlesEnabled = useGameStore((s) => s.setSubtitlesEnabled);
+
   return (
     <div className="overlay">
       <h1>TERROR'S CALL</h1>
-      <p>
-        A call came in from a house nobody had checked on in years. Screaming,
-        the dispatcher said. You're the new EMT. Your partner's already
-        irritated. Go do your job.
+      <p className="tagline">
+        2:47 AM · Heavy rain · Keller Farm Road
       </p>
-      <button onClick={onStart}>Respond to the Call</button>
+      <p>
+        Male, mid-40s, difficulty breathing, possible cardiac. The caller
+        hung up mid-sentence. Your partner called in sick, so tonight it's
+        just you, the jump bag, and a farmhouse a mile from anything.
+      </p>
+      <button onClick={onStart}>Take the Call</button>
+      {onContinue && (
+        <button className="secondary" onClick={onContinue}>
+          Continue from Checkpoint
+        </button>
+      )}
+      <label className="subtitle-toggle">
+        <input
+          type="checkbox"
+          checked={subtitlesEnabled}
+          onChange={(e) => setSubtitlesEnabled(e.target.checked)}
+        />
+        Subtitles
+      </label>
       <div className="controls-hint">
-        WASD to move &middot; Mouse to look &middot; E to interact &middot; F
-        toggles flashlight &middot; Click to lock cursor
+        WASD move &middot; Shift sprint &middot; X crouch &middot; Mouse look
+        &middot; E interact (hold when told) &middot; F flashlight &middot; P
+        patient care report &middot; Tab jump bag
       </div>
     </div>
   );

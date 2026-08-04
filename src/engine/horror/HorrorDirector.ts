@@ -1,6 +1,7 @@
 import { AudioManager } from "../audio/AudioManager";
 
-export type HorrorZone = "exterior" | "hallway" | "livingroom" | "study" | "backroom";
+/** Zone names are scene-defined; the director only compares them. */
+export type HorrorZone = string;
 
 export interface HorrorHooks {
   audio: AudioManager;

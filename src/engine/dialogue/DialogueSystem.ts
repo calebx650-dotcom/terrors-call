@@ -41,6 +41,20 @@ export class DialogueSystem {
     this.advance();
   }
 
+  /**
+   * Ambient/incidental lines (stalking barks, whispers, one-off reactions):
+   * plays only if nothing is currently on screen. This must NEVER interrupt
+   * a story sequence — play() replaces the queue AND drops the pending
+   * onEnd, so an ambient bark stomping a scripted chain would silently
+   * break story progression (this exact bug soft-locked the bedroom
+   * sequence before this method existed).
+   */
+  playAmbient(lines: DialogueLine[]): boolean {
+    if (this.playing) return false;
+    this.play(lines);
+    return true;
+  }
+
   private advance() {
     if (this.timer) window.clearTimeout(this.timer);
     const next = this.queue.shift();

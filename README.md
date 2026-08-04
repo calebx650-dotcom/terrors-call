@@ -1,33 +1,44 @@
 # Terror's Call
 
-A browser-based first-person supernatural horror game about an EMT whose
-routine call goes very wrong. Built with React, Vite, TypeScript, and
-Three.js.
+A 15–30 minute first-person retro survival-horror demo, playable in the
+browser. 1998, 2:47 AM, heavy rain: Marcus Reyes, a solo rural EMT,
+responds to a possible cardiac at an isolated farmhouse. The medical
+procedures are the horror mechanics — and the patient died three days ago.
 
-This repository currently contains a playable path from the house arrival
-through the ambulance crash: Johnny and Archer arrive at a ruined house,
-explore it, find and extract their patient, escape the house, load and drive
-the ambulance through an escalating 12-minute transport, and crash. See
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full technical design, system
-breakdown, and roadmap for the rest of the game (forest, monster, Archer's
-death — not yet built), and [`ASSETS.md`](./ASSETS.md) for the asset
-licensing policy and current (currently empty) external-asset inventory.
+Built with React, Vite, TypeScript, and Three.js. Every texture and sound
+is generated procedurally at runtime; the repo contains no external assets
+(see [`ASSETS.md`](./ASSETS.md)).
 
-## Running locally
+- [`GDD.md`](./GDD.md) — design document (story, pacing, the Patient's rules)
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — systems, engine notes, verified-bug log
+- [`TESTING.md`](./TESTING.md) — what "verified" means here
+- [`TODO.md`](./TODO.md) — known future work
+
+## Running
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the printed local URL, click "Respond to the Call", then click the
-game window to lock the mouse.
+Open the printed URL, click **Take the Call**, then click the game window
+to lock the mouse. A checkpoint is written automatically at the story's
+midpoint; **Continue from Checkpoint** appears on the title screen when
+one exists.
 
-**Controls:** WASD to move, mouse to look, `E` to interact, `F` to toggle
-the flashlight.
+**Controls:** WASD move · Shift sprint · X crouch · mouse look · E
+interact (hold when prompted) · F flashlight · P patient care report ·
+Tab jump bag. Subtitles toggle on the title screen.
+
+The demo has two endings.
 
 ## Scripts
 
-- `npm run dev` — start the Vite dev server
-- `npm run build` — typecheck and produce a production build
+- `npm run dev` — Vite dev server
+- `npm run build` — typecheck + production build
 - `npm run typecheck` — typecheck only
+
+## History
+
+An earlier, different Terror's Call story (two EMTs, a cult house, an
+ambulance crash) is preserved at commit `8e76ed9`.

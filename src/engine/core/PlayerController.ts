@@ -1,23 +1,39 @@
 import * as THREE from "three";
 import { CollisionWorld } from "./CollisionWorld";
 
-const WALK_SPEED = 2.6;
-const EYE_HEIGHT = 1.65;
+const WALK_SPEED = 2.4;
+const SPRINT_SPEED = 4.3;
+const CROUCH_SPEED = 1.3;
+const STAND_EYE_HEIGHT = 1.65;
+const CROUCH_EYE_HEIGHT = 1.05;
 const MOUSE_SENSITIVITY = 0.0022;
+const SPRINT_DRAIN_PER_SEC = 1 / 6; // empty after ~6s of sprinting
+const STAMINA_REGEN_PER_SEC = 1 / 11;
 
 export class PlayerController {
   camera: THREE.PerspectiveCamera;
   domElement: HTMLElement;
   collisionWorld: CollisionWorld;
 
-  position = new THREE.Vector3(0, EYE_HEIGHT, 0);
+  position = new THREE.Vector3(0, STAND_EYE_HEIGHT, 0);
   yaw = 0;
   pitch = 0;
+
+  /**
+   * 0..1, never shown on screen — the brief bans a stamina bar. The player
+   * reads their condition through breathing (onBreathState) and footstep
+   * cadence instead.
+   */
+  stamina = 1;
+  crouched = false;
 
   private keys: Record<string, boolean> = {};
   private locked = false;
   private footstepTimer = 0;
-  onFootstep: (() => void) | null = null;
+  private eyeHeight = STAND_EYE_HEIGHT;
+  onFootstep: ((running: boolean) => void) | null = null;
+  /** intensity 0 (rested) .. 1 (winded); drives procedural breathing audio. */
+  onBreathState: ((intensity: number) => void) | null = null;
 
   private shakeTime = 0;
   private shakeDuration = 0;
@@ -57,6 +73,9 @@ export class PlayerController {
 
   private onKeyDown = (e: KeyboardEvent) => {
     this.keys[e.code] = true;
+    if (e.code === "KeyX" || e.code === "ControlLeft") {
+      this.crouched = !this.crouched;
+    }
   };
   private onKeyUp = (e: KeyboardEvent) => {
     this.keys[e.code] = false;
@@ -71,11 +90,11 @@ export class PlayerController {
   };
 
   setSpawn(x: number, z: number, yaw = 0) {
-    this.position.set(x, EYE_HEIGHT, z);
+    this.position.set(x, this.eyeHeight, z);
     this.yaw = yaw;
   }
 
-  /** Kicks off a decaying random camera jolt — used for the ambulance impact. */
+  /** Kicks off a decaying random camera jolt — used for impacts and scares. */
   triggerShake(intensity: number, duration: number) {
     this.shakeIntensity = intensity;
     this.shakeDuration = duration;
@@ -86,6 +105,7 @@ export class PlayerController {
     if (!this.movementEnabled) {
       this.keys = {};
     }
+
     const forward = new THREE.Vector3(
       Math.sin(this.yaw),
       0,
@@ -117,10 +137,30 @@ export class PlayerController {
     }
 
     const moving = moveX !== 0 || moveZ !== 0;
+    const wantsSprint =
+      (this.keys["ShiftLeft"] || this.keys["ShiftRight"]) && !this.crouched;
+    const sprinting = moving && wantsSprint && this.stamina > 0.02;
+
+    if (sprinting) {
+      this.stamina = Math.max(0, this.stamina - SPRINT_DRAIN_PER_SEC * dt);
+    } else {
+      this.stamina = Math.min(1, this.stamina + STAMINA_REGEN_PER_SEC * dt);
+    }
+    this.onBreathState?.(1 - this.stamina);
+
+    const targetEye = this.crouched ? CROUCH_EYE_HEIGHT : STAND_EYE_HEIGHT;
+    this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 8);
+    this.position.y = this.eyeHeight;
+
     if (moving) {
+      const speed = sprinting
+        ? SPRINT_SPEED
+        : this.crouched
+          ? CROUCH_SPEED
+          : WALK_SPEED;
       const len = Math.hypot(moveX, moveZ);
-      moveX = (moveX / len) * WALK_SPEED * dt;
-      moveZ = (moveZ / len) * WALK_SPEED * dt;
+      moveX = (moveX / len) * speed * dt;
+      moveZ = (moveZ / len) * speed * dt;
 
       const delta = new THREE.Vector3(moveX, 0, moveZ);
       this.position = this.collisionWorld.resolveMove(
@@ -128,11 +168,12 @@ export class PlayerController {
         delta,
         0.35,
       );
+      this.position.y = this.eyeHeight;
 
       this.footstepTimer -= dt;
       if (this.footstepTimer <= 0) {
-        this.onFootstep?.();
-        this.footstepTimer = 0.45;
+        this.onFootstep?.(sprinting);
+        this.footstepTimer = sprinting ? 0.32 : this.crouched ? 0.7 : 0.5;
       }
     } else {
       this.footstepTimer = 0;
