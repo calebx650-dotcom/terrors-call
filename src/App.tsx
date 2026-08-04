@@ -74,16 +74,19 @@ export default function App() {
       engineRef.current = engine;
       console.log("[Terror's Call] Engine initialized, canvas added to DOM");
 
-    const scene = new FarmhouseScene(
-      engine,
-      { onPhaseChange: (p) => setPhase(p as GamePhase) },
-      { restoreMidpoint },
-    );
-    sceneRef.current = scene;
+      console.log("[Terror's Call] Creating FarmhouseScene...");
+      const scene = new FarmhouseScene(
+        engine,
+        { onPhaseChange: (p) => setPhase(p as GamePhase) },
+        { restoreMidpoint },
+      );
+      sceneRef.current = scene;
+      console.log("[Terror's Call] FarmhouseScene created, scene.children:", engine.scene.children.length);
 
-    engine.audio.resume();
-    engine.start();
-    engine.player.requestLock();
+      engine.audio.resume();
+      engine.start();
+      console.log("[Terror's Call] Engine started");
+      engine.player.requestLock();
 
     if (import.meta.env.DEV) {
       (window as any).__engine = engine;
