@@ -11,6 +11,11 @@ import {
   woodPlankKit,
 } from "../engine/materials/materialKits";
 import { grassGroundTexture, fabricTexture } from "../engine/materials/proceduralTextures";
+import {
+  createVolumetricCone,
+  updateVolumetricCone,
+} from "../engine/fx/VolumetricCone";
+import { GradePreset } from "../engine/postfx/RetroPostFX";
 import { useGameStore } from "../state/gameStore";
 import { saveMidpointCheckpoint } from "../game/checkpoint";
 import {
@@ -117,6 +122,20 @@ export class FarmhouseScene {
   private lightningTimer = 6;
   private rainPoints!: THREE.Points;
 
+  // Art-direction state.
+  private flasherL!: THREE.PointLight;
+  private flasherR!: THREE.PointLight;
+  private flasherMatL!: THREE.MeshStandardMaterial;
+  private flasherMatR!: THREE.MeshStandardMaterial;
+  private beamCone!: THREE.Mesh;
+  private moonbeamCone!: THREE.Mesh;
+  private beamDust!: THREE.Points;
+  private bulbPivot!: THREE.Group;
+  private bulbLight!: THREE.SpotLight;
+  private lightningPanes: THREE.MeshBasicMaterial[] = [];
+  private tvMat!: THREE.MeshStandardMaterial;
+  private fogTarget = 0.055;
+
   private cluesFound = new Set<string>();
   private flags = {
     arrived: false,
@@ -164,6 +183,13 @@ export class FarmhouseScene {
     this.engine.scene.add(this.patient.group);
     this.buildPatientInteraction();
 
+    // Volumetric flashlight shaft + drifting dust caught in the beam —
+    // both parented to the camera so they cost nothing to keep aligned.
+    this.beamCone = createVolumetricCone(0xfff0d0, 7.5, 2.3, 0.038);
+    this.beamCone.position.set(0.12, -0.08, 0);
+    this.engine.camera.add(this.beamCone);
+    this.buildBeamDust();
+
     this.engine.audio.startRain(0.25);
     this.engine.audio.startAmbience();
 
@@ -201,14 +227,14 @@ export class FarmhouseScene {
   private setupLighting() {
     // Power is out. Cold, thin moonlight through rain; the flashlight is
     // the player's real light source. Lightning briefly relights the world.
-    this.moon = new THREE.DirectionalLight(0x7286ad, 0.85);
+    this.moon = new THREE.DirectionalLight(0x7286ad, 1.7);
     this.moon.position.set(-14, 22, -8);
     this.engine.scene.add(this.moon);
 
-    const hemi = new THREE.HemisphereLight(0x2a3350, 0x0a0b0e, 0.55);
+    const hemi = new THREE.HemisphereLight(0x33406a, 0x0c0d12, 0.85);
     this.engine.scene.add(hemi);
 
-    const ambient = new THREE.AmbientLight(0x1c2130, 0.5);
+    const ambient = new THREE.AmbientLight(0x232a40, 0.7);
     this.engine.scene.add(ambient);
   }
 
@@ -217,19 +243,40 @@ export class FarmhouseScene {
     tex.repeat.set(24, 24);
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(90, 90),
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }),
+      new THREE.MeshStandardMaterial({
+        map: tex,
+        roughness: 0.72, // soaked earth reads slightly specular
+        envMapIntensity: 0.7,
+      }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.z = -10;
     ground.receiveShadow = true;
     this.engine.scene.add(ground);
 
+    // Standing water catching the flashers and the sky.
+    const puddleMat = new THREE.MeshStandardMaterial({
+      color: 0x05070c,
+      roughness: 0.06,
+      metalness: 0.35,
+      envMapIntensity: 1.6,
+    });
+    for (const [x, z, r] of [[-0.4, -7.5, 0.9], [2.2, -11, 0.65], [-3.6, -10.5, 0.75], [1.1, -3.6, 0.5]] as [number, number, number][]) {
+      const puddle = new THREE.Mesh(new THREE.CircleGeometry(r, 14), puddleMat);
+      puddle.rotation.x = -Math.PI / 2;
+      puddle.position.set(x, 0.012, z);
+      this.engine.scene.add(puddle);
+    }
+
     this.buildAmbulance();
     this.buildRain();
+    this.buildStorytellingDecals();
 
-    // Porch: raised slab + posts + shallow roof.
+    // Porch: raised slab + posts + shallow roof. The boards are rain-slick.
     const woodKit = woodPlankKit();
     woodKit.setRepeat(4, 2);
+    woodKit.material.roughness = 0.5;
+    woodKit.material.envMapIntensity = 0.9;
     const slab = new THREE.Mesh(new THREE.BoxGeometry(8, 0.18, 2.4), woodKit.material);
     slab.position.set(0, 0.09, -1.2);
     slab.receiveShadow = true;
@@ -253,8 +300,15 @@ export class FarmhouseScene {
 
   private buildAmbulance() {
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d0, roughness: 0.55 });
-    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xaa1f1f, roughness: 0.6 });
+    // Rain-wet paint: low roughness + envMapIntensity make the body pick
+    // up the night sky and the flashers.
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0xd8d8d0,
+      roughness: 0.3,
+      metalness: 0.15,
+      envMapIntensity: 1.2,
+    });
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xaa1f1f, roughness: 0.4, envMapIntensity: 1.1 });
 
     const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.1, 5.2), bodyMat);
     body.position.y = 1.1;
@@ -290,6 +344,36 @@ export class FarmhouseScene {
     this.beaconLight.position.set(0, 2.4, -1);
     group.add(this.beaconLight);
 
+    // Lightbar with alternating red flashers — Marcus left the emergency
+    // lights running. Their sweep across the wet yard and the house facade
+    // is the exterior's anchor image, and a promise of safety the ending
+    // is designed to break.
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6, 0.16, 0.35),
+      new THREE.MeshStandardMaterial({ color: 0x191a1e, roughness: 0.4 }),
+    );
+    bar.position.set(0, 2.24, -2.8);
+    group.add(bar);
+    this.flasherMatL = new THREE.MeshStandardMaterial({
+      color: 0x550c08,
+      emissive: 0xff1a10,
+      emissiveIntensity: 0,
+      roughness: 0.3,
+    });
+    this.flasherMatR = this.flasherMatL.clone();
+    const lensL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.3), this.flasherMatL);
+    lensL.position.set(-0.5, 2.25, -2.8);
+    group.add(lensL);
+    const lensR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.3), this.flasherMatR);
+    lensR.position.set(0.5, 2.25, -2.8);
+    group.add(lensR);
+    this.flasherL = new THREE.PointLight(0xff2a1a, 0, 26, 1.1);
+    this.flasherL.position.set(-0.6, 2.5, -2.8);
+    group.add(this.flasherL);
+    this.flasherR = new THREE.PointLight(0xff2a1a, 0, 26, 1.1);
+    this.flasherR.position.set(0.6, 2.5, -2.8);
+    group.add(this.flasherR);
+
     group.position.set(-1.5, 0, -14);
     group.rotation.y = 0.28;
     this.engine.scene.add(group);
@@ -323,14 +407,131 @@ export class FarmhouseScene {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     const mat = new THREE.PointsMaterial({
-      color: 0x8fa0bb,
-      size: 0.05,
+      color: 0x6d7d95,
+      size: 0.024,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.42,
       depthWrite: false,
     });
     this.rainPoints = new THREE.Points(geo, mat);
     this.engine.scene.add(this.rainPoints);
+  }
+
+  /**
+   * The premise, told on the floor: three previous crews walked IN through
+   * this door — muddy boot prints, fading as they dried, none pointing
+   * out — and something heavy was dragged from the kitchen toward the
+   * basement door. No dialogue references these; players who notice, notice.
+   */
+  private buildStorytellingDecals() {
+    const printTex = (() => {
+      const c = document.createElement("canvas");
+      c.width = 32;
+      c.height = 64;
+      const ctx = c.getContext("2d")!;
+      ctx.clearRect(0, 0, 32, 64);
+      ctx.fillStyle = "rgba(28,20,12,0.9)";
+      // sole + heel of a work boot
+      ctx.beginPath();
+      ctx.ellipse(16, 20, 9, 15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(16, 50, 7, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const t = new THREE.CanvasTexture(c);
+      t.magFilter = THREE.NearestFilter;
+      return t;
+    })();
+
+    // Three aging trails door -> living room, one fresh (Marcus will make
+    // the fourth). Opacity encodes age.
+    const trails: Array<{ opacity: number; offset: number }> = [
+      { opacity: 0.3, offset: -0.5 },
+      { opacity: 0.2, offset: 0.15 },
+      { opacity: 0.12, offset: 0.6 },
+    ];
+    for (const trail of trails) {
+      const waypoints: [number, number][] = [
+        [0 + trail.offset * 0.4, 0.8],
+        [-0.6 + trail.offset * 0.5, 2.4],
+        [-1.6 + trail.offset, 4.2],
+        [-2.8 + trail.offset, 5.2],
+        [-3.8 + trail.offset * 0.6, 5.9],
+      ];
+      for (let i = 0; i < waypoints.length; i++) {
+        const [x, z] = waypoints[i];
+        const next = waypoints[Math.min(i + 1, waypoints.length - 1)];
+        const angle = Math.atan2(next[0] - x, next[1] - z);
+        const print = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.13, 0.3),
+          new THREE.MeshBasicMaterial({
+            map: printTex,
+            transparent: true,
+            opacity: trail.opacity,
+            depthWrite: false,
+          }),
+        );
+        print.rotation.x = -Math.PI / 2;
+        print.rotation.z = -angle;
+        // Alternate feet left/right of the walk line.
+        const side = i % 2 === 0 ? -0.09 : 0.09;
+        print.position.set(x + Math.cos(angle) * side, 0.022, z - Math.sin(angle) * side);
+        print.renderOrder = 2;
+        this.engine.scene.add(print);
+      }
+    }
+
+    // Drag marks: two parallel scuffs, kitchen toward the basement door.
+    const dragTex = (() => {
+      const c = document.createElement("canvas");
+      c.width = 32;
+      c.height = 64;
+      const ctx = c.getContext("2d")!;
+      ctx.clearRect(0, 0, 32, 64);
+      ctx.strokeStyle = "rgba(24,16,10,0.75)";
+      ctx.lineWidth = 4;
+      for (const x of [10, 22]) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + 3, 20, x - 3, 44, x + 1, 64);
+        ctx.stroke();
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.magFilter = THREE.NearestFilter;
+      return t;
+    })();
+    const drag = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.5, 3.1),
+      new THREE.MeshBasicMaterial({ map: dragTex, transparent: true, opacity: 0.34, depthWrite: false }),
+    );
+    drag.rotation.x = -Math.PI / 2;
+    drag.rotation.z = -Math.atan2(5 - 4.2, 11.8 - 9);
+    drag.position.set(4.6, 0.022, 10.4);
+    drag.renderOrder = 2;
+    this.engine.scene.add(drag);
+  }
+
+  /** A handful of dust motes drifting through the flashlight beam. */
+  private buildBeamDust() {
+    const count = 26;
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 1.6;
+      positions[i * 3 + 1] = -0.6 + Math.random() * 1.0;
+      positions[i * 3 + 2] = -0.7 - Math.random() * 2.8;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xcfd6e4,
+      size: 0.014,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.beamDust = new THREE.Points(geo, mat);
+    this.engine.camera.add(this.beamDust);
   }
 
   // ================= world: house =================
@@ -413,15 +614,19 @@ export class FarmhouseScene {
       onInteract: () => this.openFrontDoor(),
     });
 
-    // Windows: faint cold panes on the south wall — the only "glow" downstairs.
+    // Windows: faint cold panes on the south wall — the only "glow"
+    // downstairs. Registered for lightning pulses.
     for (const x of [-4.5, 4.5]) {
-      const pane = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.1, 1.2),
-        new THREE.MeshBasicMaterial({ color: 0x33415e, transparent: true, opacity: 0.7 }),
-      );
+      const paneMat = new THREE.MeshBasicMaterial({
+        color: 0x33415e,
+        transparent: true,
+        opacity: 0.7,
+      });
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.2), paneMat);
       pane.position.set(x, 1.7, 0.17);
       pane.rotation.y = Math.PI;
       this.engine.scene.add(pane);
+      this.lightningPanes.push(paneMat);
     }
   }
 
@@ -445,11 +650,17 @@ export class FarmhouseScene {
     this.engine.scene.add(coffeeTable);
     this.movableProps.push(coffeeTable);
 
-    // A dead TV set: dark curved glass — catches the flashlight.
-    const tv = new THREE.Mesh(
-      new THREE.BoxGeometry(0.8, 0.7, 0.7),
-      new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 0.35 }),
-    );
+    // A dead TV set: dark curved glass — catches the flashlight, and for
+    // a fraction of a second during lightning it looks almost switched on.
+    this.tvMat = new THREE.MeshStandardMaterial({
+      color: 0x17171a,
+      roughness: 0.18,
+      metalness: 0.3,
+      envMapIntensity: 1.4,
+      emissive: 0x1c2836,
+      emissiveIntensity: 0,
+    });
+    const tv = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.7), this.tvMat);
     tv.position.set(-6.3, 0.75, 7.6);
     tv.castShadow = true;
     this.engine.scene.add(tv);
@@ -464,13 +675,29 @@ export class FarmhouseScene {
     beam.target = target;
     this.engine.scene.add(beam);
     this.lights.push(beam);
-    const pane = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.2, 1.3),
-      new THREE.MeshBasicMaterial({ color: 0x3a4a6b, transparent: true, opacity: 0.75 }),
-    );
+    const paneMat = new THREE.MeshBasicMaterial({
+      color: 0x3a4a6b,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.3), paneMat);
     pane.position.set(-6.83, 1.9, 6);
     pane.rotation.y = Math.PI / 2;
     this.engine.scene.add(pane);
+    this.lightningPanes.push(paneMat);
+
+    // The moonbeam made visible: a volumetric shaft from the window down
+    // across the patient — the room's composition anchor.
+    this.moonbeamCone = createVolumetricCone(0x8fa4d0, 7.2, 1.5, 0.06);
+    this.moonbeamCone.position.set(-6.8, 2.85, 6);
+    const dir = new THREE.Vector3(-3.5, 0, 6)
+      .sub(this.moonbeamCone.position)
+      .normalize();
+    this.moonbeamCone.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 0, -1),
+      dir,
+    );
+    this.engine.scene.add(this.moonbeamCone);
   }
 
   private buildKitchen() {
@@ -612,6 +839,7 @@ export class FarmhouseScene {
       );
       photo.position.set(-1.66, 1.65, 13 + i * 2);
       photo.rotation.y = Math.PI / 2;
+      if (i === 1) photo.rotation.z = 0.07; // one frame hangs crooked
       this.engine.scene.add(photo);
       this.photoMeshes.push(photo);
       this.engine.interaction.register({
@@ -900,6 +1128,43 @@ export class FarmhouseScene {
     bench.position.set(BASEMENT_X - 3.4, 0.45, 6);
     this.engine.scene.add(bench);
     this.engine.collisionWorld.addFromMesh(bench);
+
+    // A single bare bulb on a cord, gently swinging, throwing moving
+    // shadows. The house has no power — Marcus said so himself on the
+    // porch — and this bulb burns anyway. Nobody comments on it. It is
+    // also the only shadow-casting light besides the flashlight, and it
+    // only exists while the player is down here (toggled by zone).
+    this.bulbPivot = new THREE.Group();
+    this.bulbPivot.position.set(BASEMENT_X, 2.28, 4.6);
+    const cord = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4),
+      new THREE.MeshStandardMaterial({ color: 0x121110, roughness: 1 }),
+    );
+    cord.position.y = -0.25;
+    this.bulbPivot.add(cord);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xffe6b8,
+        emissive: 0xffc06a,
+        emissiveIntensity: 2.2,
+        roughness: 0.4,
+      }),
+    );
+    bulb.position.y = -0.52;
+    this.bulbPivot.add(bulb);
+    this.bulbLight = new THREE.SpotLight(0xffd9a2, 4.2, 8, 1.05, 0.55, 1.1);
+    this.bulbLight.position.y = -0.52;
+    this.bulbLight.castShadow = true;
+    this.bulbLight.shadow.mapSize.set(512, 512);
+    this.bulbLight.shadow.bias = -0.003;
+    const bulbTarget = new THREE.Object3D();
+    bulbTarget.position.set(0, -3, 0);
+    this.bulbPivot.add(bulbTarget);
+    this.bulbLight.target = bulbTarget;
+    this.bulbPivot.add(this.bulbLight);
+    this.bulbPivot.visible = false; // enabled on basement entry
+    this.engine.scene.add(this.bulbPivot);
 
     // The real patient.
     const body = buildDeadBody();
@@ -1344,11 +1609,19 @@ export class FarmhouseScene {
     window.setTimeout(done, ms);
   }
 
+  /** All zone transitions funnel through here so onZoneChange always fires. */
+  private setZone(next: Zone) {
+    if (next === this.zone) return;
+    const prev = this.zone;
+    this.zone = next;
+    this.onZoneChange(prev, next);
+  }
+
   private gotoUpstairs() {
     this.fadeTransition(() => {
       this.engine.audio.woodCreak();
       this.engine.player.setSpawn(UPSTAIRS_X - 3, 1.6, Math.PI);
-      this.zone = "upstairs";
+      this.setZone("upstairs");
     });
   }
 
@@ -1356,7 +1629,7 @@ export class FarmhouseScene {
     this.fadeTransition(() => {
       this.engine.audio.woodCreak();
       this.engine.player.setSpawn(pos.x, pos.z, yaw);
-      this.zone = "hallway";
+      this.setZone("hallway");
     });
   }
 
@@ -1364,7 +1637,7 @@ export class FarmhouseScene {
     this.fadeTransition(() => {
       this.engine.audio.woodCreak();
       this.engine.player.setSpawn(BASEMENT_X - 3, 1.4, Math.PI);
-      this.zone = "basement";
+      this.setZone("basement");
     });
   }
 
@@ -1470,21 +1743,76 @@ export class FarmhouseScene {
     // Beacon idle pulse.
     this.beaconLight.intensity = 0.25 + Math.abs(Math.sin(performance.now() * 0.0016)) * 0.3;
 
-    // Lightning.
+    // Lightning: flash first (window panes + the TV glass answer it),
+    // thunder arrives on a believable delay.
     this.lightningTimer -= dt;
     if (this.lightningTimer <= 0) {
       this.lightningTimer = 14 + Math.random() * 22;
       if (this.zone === "exterior" || this.zone === "porch" || Math.random() < 0.4) {
         const original = this.moon.intensity;
-        this.moon.intensity = 4.5;
-        this.engine.audio.thunder();
-        window.setTimeout(() => (this.moon.intensity = original), 140);
-        window.setTimeout(() => {
-          this.moon.intensity = 3.2;
-          window.setTimeout(() => (this.moon.intensity = original), 90);
-        }, 260);
+        const flash = (intensity: number, ms: number) => {
+          this.moon.intensity = intensity;
+          for (const pane of this.lightningPanes) pane.opacity = 1;
+          if (this.tvMat) this.tvMat.emissiveIntensity = 0.7;
+          window.setTimeout(() => {
+            this.moon.intensity = original;
+            for (const pane of this.lightningPanes) pane.opacity = 0.72;
+            if (this.tvMat) this.tvMat.emissiveIntensity = 0;
+          }, ms);
+        };
+        flash(4.5, 140);
+        window.setTimeout(() => flash(3.2, 90), 260);
+        window.setTimeout(
+          () => this.engine.audio.thunder(),
+          350 + Math.random() * 1200,
+        );
       }
     }
+
+    // Ambulance flashers: alternating half-second red sweep.
+    {
+      const phase = Math.sin(performance.now() * 0.006) > 0;
+      const on = 5.5, off = 0;
+      this.flasherL.intensity = phase ? on : off;
+      this.flasherR.intensity = phase ? off : on;
+      this.flasherMatL.emissiveIntensity = phase ? 2.6 : 0.05;
+      this.flasherMatR.emissiveIntensity = phase ? 0.05 : 2.6;
+    }
+
+    // Basement bulb swing (only while visible).
+    if (this.bulbPivot.visible) {
+      const t = performance.now() * 0.001;
+      this.bulbPivot.rotation.x = Math.sin(t * 0.9) * 0.1;
+      this.bulbPivot.rotation.z = Math.sin(t * 0.7 + 1.3) * 0.12;
+      // Occasional filament sputter.
+      if (Math.random() < 0.01) {
+        this.bulbLight.intensity = 1.6 + Math.random() * 2;
+      } else if (this.bulbLight.intensity < 4.1) {
+        this.bulbLight.intensity = Math.min(4.2, this.bulbLight.intensity + dt * 6);
+      }
+    }
+
+    // Volumetric shafts + flashlight-coupled visibility.
+    updateVolumetricCone(this.beamCone, dt);
+    updateVolumetricCone(this.moonbeamCone, dt);
+    this.beamCone.visible = this.engine.flashlight.on;
+    this.beamDust.visible = this.engine.flashlight.on;
+
+    // Beam dust drift (local space, recycled).
+    {
+      const positions = (this.beamDust.geometry as THREE.BufferGeometry)
+        .attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < positions.count; i++) {
+        let y = positions.getY(i) - dt * 0.05;
+        if (y < -0.7) y = 0.5;
+        positions.setY(i, y);
+      }
+      positions.needsUpdate = true;
+    }
+
+    // Per-zone fog density eases toward its target.
+    const fog = this.engine.scene.fog as THREE.FogExp2;
+    fog.density += (this.fogTarget - fog.density) * Math.min(1, dt * 1.2);
 
     this.horror.update(dt);
     this.updateZone();
@@ -1510,18 +1838,19 @@ export class FarmhouseScene {
     else if (p.x > 1.8) next = "bathroom";
     else next = "hallway";
 
-    if (next !== this.zone) {
-      const prev = this.zone;
-      this.zone = next;
-      this.onZoneChange(prev, next);
-    }
+    this.setZone(next);
   }
 
   private onZoneChange(prev: Zone, next: Zone) {
     this.applyZoneRain();
+    this.applyZoneAtmosphere(next);
 
     if (next === "kitchen") this.engine.audio.startFridge();
     else if (prev === "kitchen") this.engine.audio.stopFridge();
+
+    // The basement's impossible bulb (and its shadow map) exists only
+    // while the player is down there.
+    this.bulbPivot.visible = next === "basement";
 
     // Photos advance only between hallway visits, never while watched.
     if (next === "hallway") {
@@ -1534,6 +1863,32 @@ export class FarmhouseScene {
         if (this.zone !== "hallway") this.advancePhotos();
       }, 900);
     }
+  }
+
+  /** Fog density + color grade per zone: the four areas read differently. */
+  private applyZoneAtmosphere(zone: Zone) {
+    const fogByZone: Record<Zone, number> = {
+      exterior: 0.055,
+      porch: 0.05,
+      entry: 0.035,
+      livingroom: 0.035,
+      kitchen: 0.035,
+      hallway: 0.035,
+      bathroom: 0.035,
+      upstairs: 0.028,
+      basement: 0.062,
+    };
+    this.fogTarget = fogByZone[zone];
+
+    const grade: GradePreset =
+      zone === "exterior" || zone === "porch"
+        ? "exterior"
+        : zone === "upstairs"
+          ? "upstairs"
+          : zone === "basement"
+            ? "basement"
+            : "ground";
+    this.engine.postfx.setGradePreset(grade);
   }
 
   private applyZoneRain() {

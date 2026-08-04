@@ -136,16 +136,48 @@ offset **second heartbeat**, fridge hum tuned a few cents flat, rotary
 phone bell, radio static, door/wood creaks, whispers, stings. Silence is
 deliberate: the pulse check and the basement discovery pull every bed down.
 
-## 7. Visual identity
+## 7. Visual identity (art-direction pass)
 
-~240p internal render target upscaled with nearest-neighbor filtering,
-plus one combined shader pass: film grain, dither, CRT scanlines +
-vignette, occasional VHS tracking bands (`triggerTracking`), and chromatic
-aberration that is near-zero at rest and surges via `setStress()` during
-scares, decaying automatically. Lighting: the power is out — thin blue
-moonlight, lightning flashes synced to thunder, and the flashlight as the
-player's primary light. Materials use the procedural kits (matched
-albedo/normal/roughness). Rain is a recycled particle field over the yard.
+The pipeline: scene renders ACES-filmic-tonemapped into a ~240p target →
+subtle `UnrealBloomPass` (high threshold, so only true light sources
+halate) → the combined VHS/CRT pass: film grain, dither, scanlines,
+vignette, tracking bands, tape-noise dropout lines, stress-driven
+chromatic aberration, and a **per-zone color grade** (lift/gain/
+saturation, lerped on area changes: rain-blue exterior, neutral-cold
+ground floor, dusty warm-gray upstairs, sickly green basement). Fog
+density also eases per zone.
+
+**Cinematic lighting & volumetrics** (all zone-aware, all cheap at 240p):
+
+- The flashlight has a 1024 shadow map, handheld lag (the beam trails look
+  velocity and settles), idle breathing drift, and a **volumetric cone**
+  with dust motes caught in it (`engine/fx/VolumetricCone.ts` — additive
+  open cone, near/far/rim fades; no raymarching).
+- The living-room moonbeam is a second volumetric shaft: window → shaft →
+  patient is the room's composition anchor.
+- The ambulance runs **alternating red flashers** whose sweep reads on the
+  wet facade and puddles — the exterior's anchor image.
+- The basement has a **single swinging bare bulb** (shadow-casting spot,
+  filament sputter, enabled only in-zone) lighting the body — in a house
+  Marcus established has no power. Nobody comments on it.
+- Lightning flashes relight the world first (window panes flare, the dead
+  TV glass answers), thunder follows on a believable delay.
+- A tiny procedural night-sky PMREM environment gives PBR speculars life:
+  wet ambulance paint, puddles (roughness ~0.06 mirrors), rain-slick porch
+  boards, the TV's glass.
+- Camera: eased head bob + constant breathing sway; PS1 vertex wobble is
+  approximated in post (true vertex-snap hook remains a TODO).
+
+**Environmental storytelling decals**: three aging trails of muddy boot
+prints walk IN from the front door to the patient — none walk out — and
+drag marks run from the kitchen to the basement door. One hallway photo
+frame hangs crooked. None of it is called out in dialogue.
+
+**Library decision:** pmndrs/postprocessing was evaluated for this pass
+and deliberately not adopted — at a 240p target its extras are either
+counterproductive to the PS1 crunch (SMAA) or redundant, and the bespoke
+VHS shader is the game's identity. Three's bundled UnrealBloomPass filled
+the only real gap with zero new dependencies.
 
 ## 8. Verification (what was actually tested)
 
@@ -171,6 +203,12 @@ within 8s). Bugs found and fixed by this pass:
    be structurally unable to interrupt scripted progression.**
 4. The endings' cut-to-black overlay sat above the end cards permanently —
    now the black holds for a beat, then lifts.
+5. (Art-direction pass) Stair transitions set the current zone directly,
+   bypassing `onZoneChange` — so zone-gated systems (the basement bulb,
+   fog/grade changes, the fridge hum) silently never fired after a fade
+   transition. All zone changes now funnel through one `setZone()`. The
+   full double-ending regression was re-run after the visual pass and
+   still passes clean.
 
 ## 9. Deviations from the Unity brief
 

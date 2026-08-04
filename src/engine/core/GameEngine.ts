@@ -46,6 +46,10 @@ export class GameEngine {
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Filmic rolloff instead of linear clipping — the single cheapest
+    // "not a default Three.js demo" switch there is.
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.4;
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
@@ -58,6 +62,29 @@ export class GameEngine {
     );
 
     this.scene.fog = new THREE.FogExp2(0x05060a, 0.045);
+
+    // A tiny procedural night-sky equirect fed through PMREM gives every
+    // MeshStandardMaterial a believable (near-black, blue-topped) specular
+    // environment: wet paint, mirrors, and metal stop rendering dead.
+    {
+      const c = document.createElement("canvas");
+      c.width = 64;
+      c.height = 32;
+      const ctx = c.getContext("2d")!;
+      const grad = ctx.createLinearGradient(0, 0, 0, 32);
+      grad.addColorStop(0, "#141c30");
+      grad.addColorStop(0.55, "#05070d");
+      grad.addColorStop(1, "#000000");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 32);
+      const equirect = new THREE.CanvasTexture(c);
+      equirect.mapping = THREE.EquirectangularReflectionMapping;
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.scene.environment = pmrem.fromEquirectangular(equirect).texture;
+      this.scene.environmentIntensity = 0.3;
+      pmrem.dispose();
+      equirect.dispose();
+    }
 
     this.player = new PlayerController(
       this.camera,
@@ -134,13 +161,21 @@ export class GameEngine {
     this.container.removeChild(this.renderer.domElement);
   }
 
+  private prevYaw = 0;
+  private prevPitch = 0;
+
   private loop = () => {
     if (!this.running) return;
     this.frameHandle = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.1);
 
     this.player.update(dt);
-    this.flashlight.update(dt);
+    // Look velocity feeds the flashlight's handheld lag.
+    const yawVel = dt > 0 ? (this.player.yaw - this.prevYaw) / dt : 0;
+    const pitchVel = dt > 0 ? (this.player.pitch - this.prevPitch) / dt : 0;
+    this.prevYaw = this.player.yaw;
+    this.prevPitch = this.player.pitch;
+    this.flashlight.update(dt, yawVel, pitchVel);
 
     const hit = this.interaction.update(dt);
     this.callbacks.onPrompt(hit ? hit.prompt : null);

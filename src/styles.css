@@ -47,6 +47,33 @@ html, body, #root {
   color: #b91f1f;
   text-shadow: 0 0 18px rgba(185, 31, 31, 0.55);
   letter-spacing: 0.15em;
+  animation: title-flicker 7s infinite;
+}
+
+/* CRT phosphor flicker on menu titles — irregular, mostly imperceptible. */
+@keyframes title-flicker {
+  0%, 100% { opacity: 1; }
+  91.5% { opacity: 1; }
+  92% { opacity: 0.72; }
+  92.4% { opacity: 1; }
+  95.8% { opacity: 1; }
+  96.1% { opacity: 0.85; text-shadow: 0 0 26px rgba(185, 31, 31, 0.8); }
+  96.5% { opacity: 1; }
+}
+
+/* Faint scanlines over every full-screen menu so the UI shares the game's
+   CRT identity instead of floating on top of it. */
+.overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.14) 3px
+  );
 }
 
 .overlay p {

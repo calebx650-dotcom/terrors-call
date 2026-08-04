@@ -38,6 +38,9 @@ export class PlayerController {
   private shakeTime = 0;
   private shakeDuration = 0;
   private shakeIntensity = 0;
+  private bobPhase = 0;
+  private bobAmount = 0; // eased in/out so stopping doesn't snap the camera
+  private idleTime = Math.random() * 10;
   /** When false, WASD input is ignored (scripted/vehicle sequences) while look is still free. */
   movementEnabled = true;
 
@@ -183,6 +186,18 @@ export class PlayerController {
     this.camera.rotation.set(0, 0, 0);
     this.camera.rotateY(this.yaw);
     this.camera.rotateX(this.pitch);
+
+    // Head bob (eased so stopping never snaps) + a constant breathing sway.
+    // Amplitudes are deliberately tiny: felt, not watched.
+    const targetBob = moving ? (sprinting ? 1.4 : this.crouched ? 0.5 : 1) : 0;
+    this.bobAmount += (targetBob - this.bobAmount) * Math.min(1, dt * 6);
+    if (this.bobAmount > 0.01) {
+      this.bobPhase += dt * (sprinting ? 11 : this.crouched ? 5 : 7.5);
+      this.camera.translateY(Math.abs(Math.sin(this.bobPhase)) * 0.014 * this.bobAmount);
+      this.camera.translateX(Math.cos(this.bobPhase * 0.5) * 0.008 * this.bobAmount);
+    }
+    this.idleTime += dt;
+    this.camera.translateY(Math.sin(this.idleTime * 1.6) * 0.004);
 
     if (this.shakeTime > 0) {
       this.shakeTime -= dt;
