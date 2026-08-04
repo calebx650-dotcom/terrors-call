@@ -63,14 +63,16 @@ export default function App() {
   useEffect(() => {
     if (!started || !containerRef.current) return;
 
-    const engine = new GameEngine(containerRef.current, {
-      onSubtitle: (speaker, text, id) => {
-        if (id === -1) setSubtitle(null);
-        else setSubtitle({ speaker, text, id });
-      },
-      onPrompt: (prompt) => setInteractionPrompt(prompt),
-    });
-    engineRef.current = engine;
+    try {
+      const engine = new GameEngine(containerRef.current, {
+        onSubtitle: (speaker, text, id) => {
+          if (id === -1) setSubtitle(null);
+          else setSubtitle({ speaker, text, id });
+        },
+        onPrompt: (prompt) => setInteractionPrompt(prompt),
+      });
+      engineRef.current = engine;
+      console.log("[Terror's Call] Engine initialized, canvas added to DOM");
 
     const scene = new FarmhouseScene(
       engine,
@@ -88,11 +90,15 @@ export default function App() {
       (window as any).__scene = scene;
     }
 
-    return () => {
-      engine.dispose();
-      engineRef.current = null;
-      sceneRef.current = null;
-    };
+      return () => {
+        engine.dispose();
+        engineRef.current = null;
+        sceneRef.current = null;
+      };
+    } catch (err) {
+      console.error("[Terror's Call] Engine init failed:", err);
+      throw err;
+    }
   }, [started, runId]);
 
   const handleStart = (fromCheckpoint: boolean) => {
