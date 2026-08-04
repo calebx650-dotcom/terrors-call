@@ -177,7 +177,47 @@ frame hangs crooked. None of it is called out in dialogue.
 and deliberately not adopted — at a 240p target its extras are either
 counterproductive to the PS1 crunch (SMAA) or redundant, and the bespoke
 VHS shader is the game's identity. Three's bundled UnrealBloomPass filled
-the only real gap with zero new dependencies.
+the only real gap with zero new dependencies. drei-vanilla's
+`MeshReflectorMaterial` was evaluated for wet-puddle reflections in the
+follow-up pass and also declined — at 240p a full off-screen mirror pass
+per puddle costs more than the reflected image can visibly buy back;
+prefer a custom rain shader (see below) and PMREM speculars.
+
+**Art-direction pass 2 additions** (all direction-first, no new deps):
+
+- *Custom lit rain*: `PointsMaterial` was unlit — replaced with a
+  `ShaderMaterial` that reads the flashlight and moonbeam pose from
+  uniforms and brightens raindrops inside those cones. This is the
+  game's iconic image (rain-in-the-beam) and it didn't exist before.
+- *Rain-on-ground splashes*: a pooled ring-geometry effect that spawns
+  concentric expanding rings near the player only while outdoors.
+  Capped at 22 concurrent for a fixed CPU budget.
+- *Room-defining practicals*: the fridge door hangs open a crack in a
+  house with no power, leaking cold cyan-green light across the kitchen
+  floor and painting the plaster wall; a small back-window over the
+  stairs backlights the hallway so anything standing there reads as a
+  silhouette (the exact spot the Patient likes to stand); a frosted
+  cyan pane defines the bathroom.
+- *Storm distance model*: each strike picks a real distance in km, and
+  both thunder delay (2.9s/km + jitter) and thunder loudness+timbre
+  come out of that distance. The storm walks closer over the demo's
+  runtime so the tempo tightens naturally as tension rises.
+- *Close-strike figure reveal*: a rare close strike spawns a humanoid
+  silhouette across the yard that lasts ~1 second and then isn't there.
+- *Composition carpentry*: dark doorframes around every room doorway,
+  ceiling beams in the living room and hallway, cross mullions on every
+  window pane — turns each sightline into a framed vignette and gives
+  the corridor foreground occlusion.
+- *Environmental storytelling for the three-crew premise*: crew one's
+  penlight rolled against the baseboard and still on (pulsing, dying
+  batteries), crew two's shed nitrile glove by the patient, crew
+  three's abandoned county jump bag at the foot of the couch. None are
+  referenced in dialogue.
+- *Physical camera*: turn inertia (`snapLook`), head bob eased in/out,
+  breathing sway, footstep flashlight kicks.
+- *Restraint pass*: reduced bloom strength/vignette/scanlines from the
+  first visual pass — the post is quieter now, letting the geometry
+  and lighting carry the frame instead of the filter.
 
 ## 8. Verification (what was actually tested)
 
@@ -209,6 +249,15 @@ within 8s). Bugs found and fixed by this pass:
    transition. All zone changes now funnel through one `setZone()`. The
    full double-ending regression was re-run after the visual pass and
    still passes clean.
+6. (Art-direction pass 2) Adding turn inertia broke every place in the
+   codebase (and the regression) that wrote `player.yaw = X` directly:
+   the visible yaw chases a private `yawTarget` each frame, so half-writes
+   drift. Fixed by introducing `snapLook(yaw, pitch)` as the one
+   documented way to teleport the camera. `setSpawn` now uses it, the
+   scene's ending-B framing uses it, and the doc string on the method
+   explains the rule: mouse-look updates targets, scripted framing snaps
+   both. If anyone reintroduces `player.yaw = ...` in this codebase it
+   should show up in code review immediately.
 
 ## 9. Deviations from the Unity brief
 

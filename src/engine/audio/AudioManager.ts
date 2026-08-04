@@ -95,20 +95,29 @@ export class AudioManager {
     this.rainSource = null;
   }
 
-  thunder() {
-    // Low rumble with a slow decay and a small initial crack.
-    this.noiseBurst(2400, 1, 0.08, 0.2);
+  /**
+   * Thunder at a given loudness (0..~0.6). Distant storms are quieter,
+   * longer, and lose their initial crack; close ones snap. The caller
+   * derives volume + delay from the same storm distance so light and
+   * sound stay physically consistent.
+   */
+  thunder(volume = 0.5) {
+    const close = volume > 0.35;
+    if (close) this.noiseBurst(2400, 1, 0.08, volume * 0.5);
     const src = this.ctx.createBufferSource();
-    src.buffer = this.noiseBuffer(3);
+    src.buffer = this.noiseBuffer(3.5);
     const filter = this.ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.value = 120;
+    filter.frequency.value = close ? 140 : 80;
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 3);
+    gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      this.ctx.currentTime + (close ? 2.6 : 3.5),
+    );
     src.connect(filter).connect(gain).connect(this.master);
     src.start();
-    src.stop(this.ctx.currentTime + 3);
+    src.stop(this.ctx.currentTime + 3.6);
   }
 
   startWind(volume = 0.15) {

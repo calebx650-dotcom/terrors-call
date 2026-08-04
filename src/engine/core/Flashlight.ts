@@ -20,6 +20,8 @@ export class Flashlight {
   private swayX = 0;
   private swayY = 0;
   private swayTime = Math.random() * 10;
+  private impulseX = 0;
+  private impulseY = 0;
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.light = new THREE.SpotLight(0xfff2d6, 3.2, 14, Math.PI / 7, 0.55, 1.3);
@@ -40,6 +42,12 @@ export class Flashlight {
     this.light.visible = this.on;
   }
 
+  /** A small random jolt — fired on footsteps so the beam lands with the step. */
+  kick(strength: number) {
+    this.impulseX += (Math.random() - 0.5) * strength;
+    this.impulseY -= Math.random() * strength * 0.7;
+  }
+
   update(dt: number, yawVel = 0, pitchVel = 0) {
     if (!this.on) return;
 
@@ -55,7 +63,16 @@ export class Flashlight {
     const idleX = Math.sin(this.swayTime * 0.9) * 0.012;
     const idleY = Math.sin(this.swayTime * 1.4 + 1.7) * 0.009;
 
-    this.target.position.set(this.swayX + idleX, this.swayY + idleY, -1);
+    // Footstep impulses decay quickly — the beam settles like a held object.
+    const decay = Math.max(0, 1 - dt * 7);
+    this.impulseX *= decay;
+    this.impulseY *= decay;
+
+    this.target.position.set(
+      this.swayX + idleX + this.impulseX,
+      this.swayY + idleY + this.impulseY,
+      -1,
+    );
 
     this.flickerTimer -= dt;
     if (this.flickerTimer <= 0) {

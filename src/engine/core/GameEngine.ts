@@ -101,7 +101,10 @@ export class GameEngine {
       this.callbacks.onSubtitle(speaker, text, id),
     );
 
-    this.player.onFootstep = (running) => this.audio.footstep(running);
+    this.player.onFootstep = (running) => {
+      this.audio.footstep(running);
+      this.flashlight.kick(running ? 0.03 : 0.016);
+    };
     this.player.onBreathState = (intensity) =>
       this.audio.setBreathIntensity(intensity);
 

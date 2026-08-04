@@ -135,6 +135,12 @@ export class FarmhouseScene {
   private lightningPanes: THREE.MeshBasicMaterial[] = [];
   private tvMat!: THREE.MeshStandardMaterial;
   private fogTarget = 0.055;
+  private fridgeLight!: THREE.PointLight;
+  private fridgeLightOn = false;
+  private curtain!: THREE.Mesh;
+  private penLightPt!: THREE.PointLight;
+  private stormAge = 0;
+  private lightningFigure: THREE.Mesh | null = null;
 
   private cluesFound = new Set<string>();
   private flags = {
@@ -270,6 +276,7 @@ export class FarmhouseScene {
 
     this.buildAmbulance();
     this.buildRain();
+    this.buildSplashes();
     this.buildStorytellingDecals();
 
     // Porch: raised slab + posts + shallow roof. The boards are rain-slick.
@@ -413,8 +420,171 @@ export class FarmhouseScene {
       opacity: 0.42,
       depthWrite: false,
     });
-    this.rainPoints = new THREE.Points(geo, mat);
+    this.rainPoints = new THREE.Points(geo, this.buildRainMaterial());
+    this.rainPoints.frustumCulled = false;
     this.engine.scene.add(this.rainPoints);
+  }
+
+  /**
+   * Rain that reacts to the flashlight and moonbeam instead of being flat
+   * point sprites. In view space: streaks brighten as they approach the
+   * camera's forward cone, and again along a moonbeam-aligned axis so the
+   * cone above the patient sparkles. Both are cheap: only the sprite's own
+   * position, one uniform each frame.
+   */
+  private rainUniforms = {
+    beamDir: { value: new THREE.Vector3(0, 0, -1) },
+    beamPos: { value: new THREE.Vector3() },
+    beamActive: { value: 1.0 },
+    moonPos: { value: new THREE.Vector3(-6.8, 2.85, 6) },
+    moonDir: { value: new THREE.Vector3(0.4, -0.4, 0).normalize() },
+  };
+  private buildRainMaterial() {
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: {
+        ...this.rainUniforms,
+        baseColor: { value: new THREE.Color(0x6d7d95) },
+        litColor: { value: new THREE.Color(0xffeecb) },
+        moonColor: { value: new THREE.Color(0xaec0e2) },
+      },
+      vertexShader: /* glsl */ `
+        uniform vec3 beamPos;
+        uniform vec3 beamDir;
+        uniform vec3 moonPos;
+        uniform vec3 moonDir;
+        varying float vBeam;
+        varying float vMoon;
+        varying float vDepth;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vDepth = -mv.z;
+          // Beam response: brightest when the raindrop is close to the
+          // camera AND inside the beam cone.
+          vec3 toDrop = position - beamPos;
+          float dist = length(toDrop);
+          float cone = max(0.0, dot(normalize(toDrop), normalize(beamDir)));
+          vBeam = smoothstep(0.55, 0.96, cone) * smoothstep(9.0, 1.5, dist);
+          // Moon column: proximity to a vertical line under the window.
+          vec3 toMoon = position - moonPos;
+          float axial = dot(toMoon, normalize(moonDir));
+          vec3 perp = toMoon - axial * normalize(moonDir);
+          float perpDist = length(perp);
+          vMoon = smoothstep(1.6, 0.2, perpDist) * step(-6.0, axial) * step(axial, 4.5);
+          gl_Position = projectionMatrix * mv;
+          // Nearby drops draw larger — real depth cue.
+          gl_PointSize = mix(4.5, 1.2, clamp(vDepth / 18.0, 0.0, 1.0));
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 baseColor;
+        uniform vec3 litColor;
+        uniform vec3 moonColor;
+        uniform float beamActive;
+        varying float vBeam;
+        varying float vMoon;
+        varying float vDepth;
+        void main() {
+          // Streak shape: elongated in y within the point sprite.
+          vec2 uv = gl_PointCoord - 0.5;
+          float streak = smoothstep(0.5, 0.0, abs(uv.x) * 3.8)
+                       * smoothstep(0.5, 0.05, abs(uv.y));
+          if (streak < 0.02) discard;
+          vec3 c = baseColor;
+          c = mix(c, litColor, vBeam * beamActive * 0.9);
+          c = mix(c, moonColor, vMoon * 0.65);
+          float a = streak * (0.35 + vBeam * beamActive * 0.55 + vMoon * 0.3);
+          // Distance fade
+          a *= smoothstep(45.0, 6.0, vDepth) * 0.8 + 0.2;
+          gl_FragColor = vec4(c, a);
+        }
+      `,
+    });
+  }
+
+  /**
+   * Rain hitting the ground and the porch: tiny expanding rings that
+   * appear at random spots and fade. All CPU-updated, one instanced ring
+   * pool, capped so it never spikes.
+   */
+  private splashes: Array<{ pos: THREE.Vector3; age: number }> = [];
+  private splashPool: THREE.Mesh[] = [];
+  private buildSplashes() {
+    const ringGeo = new THREE.RingGeometry(0.02, 0.05, 12);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xbcc9dc,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+    });
+    for (let i = 0; i < 22; i++) {
+      const m = new THREE.Mesh(ringGeo, ringMat.clone());
+      m.visible = false;
+      m.renderOrder = 3;
+      this.engine.scene.add(m);
+      this.splashPool.push(m);
+    }
+  }
+
+  private spawnSplash() {
+    if (this.splashes.length >= this.splashPool.length) return;
+    // Concentrate around the player so they always read on screen.
+    const p = this.engine.player.position;
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 1.5 + Math.random() * 5;
+    this.splashes.push({
+      pos: new THREE.Vector3(
+        p.x + Math.cos(angle) * radius,
+        0.021,
+        p.z + Math.sin(angle) * radius,
+      ),
+      age: 0,
+    });
+  }
+
+  /**
+   * A close lightning strike sometimes lands a silhouette across the yard
+   * that lasts a fraction of a second and then isn't there. Uses the
+   * standing Patient's low-poly outline as a shape so the shape is
+   * recognizable enough to unsettle without being explicit.
+   */
+  private spawnLightningFigure() {
+    if (this.lightningFigure) return;
+    const geo = new THREE.PlaneGeometry(0.9, 2.0);
+    const c = document.createElement("canvas");
+    c.width = 32;
+    c.height = 64;
+    const ctx = c.getContext("2d")!;
+    ctx.clearRect(0, 0, 32, 64);
+    ctx.fillStyle = "#000";
+    // A tall thin humanoid: head, shoulders, body, straight arms.
+    ctx.beginPath();
+    ctx.arc(16, 8, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(11, 12, 10, 20); // torso
+    ctx.fillRect(7, 14, 3, 22); // left arm
+    ctx.fillRect(22, 14, 3, 22); // right arm
+    ctx.fillRect(12, 32, 3, 26); // left leg
+    ctx.fillRect(17, 32, 3, 26); // right leg
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
+    this.lightningFigure = new THREE.Mesh(geo, mat);
+    // Placed at the tree line; billboarded once so it always faces the
+    // player from a defensible viewing angle.
+    const p = this.engine.player.position;
+    const dx = -3 + Math.random() * 6;
+    const dz = -18 + Math.random() * 3;
+    this.lightningFigure.position.set(p.x + dx, 1, p.z + dz);
+    this.lightningFigure.lookAt(p.x, 1, p.z);
+    this.engine.scene.add(this.lightningFigure);
   }
 
   /**
@@ -615,19 +785,105 @@ export class FarmhouseScene {
     });
 
     // Windows: faint cold panes on the south wall — the only "glow"
-    // downstairs. Registered for lightning pulses.
+    // downstairs. Rain-streaked glass, cross mullions, lightning-pulsed.
     for (const x of [-4.5, 4.5]) {
-      const paneMat = new THREE.MeshBasicMaterial({
-        color: 0x33415e,
-        transparent: true,
-        opacity: 0.7,
-      });
+      const paneMat = this.makeRainGlassMaterial(0x33415e, 0.7);
       const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.2), paneMat);
       pane.position.set(x, 1.7, 0.17);
       pane.rotation.y = Math.PI;
       this.engine.scene.add(pane);
       this.lightningPanes.push(paneMat);
+      this.addMullions(new THREE.Vector3(x, 1.7, 0.19), 1.1, 1.2, "z");
     }
+
+    this.buildFraming();
+  }
+
+  /** Glass with vertical rain streaks baked into the texture. */
+  private makeRainGlassMaterial(color: number, opacity: number) {
+    const c = document.createElement("canvas");
+    c.width = 32;
+    c.height = 32;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.strokeStyle = "rgba(210,225,255,0.85)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+      const x = Math.random() * 32;
+      ctx.beginPath();
+      ctx.moveTo(x, -2);
+      ctx.lineTo(x + (Math.random() - 0.5) * 3, 34);
+      ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    return new THREE.MeshBasicMaterial({
+      color,
+      map: tex,
+      transparent: true,
+      opacity,
+    });
+  }
+
+  /** Dark cross bars over a window pane — silhouettes during lightning. */
+  private addMullions(center: THREE.Vector3, w: number, h: number, facing: "x" | "z") {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x141009, roughness: 1 });
+    const vert = new THREE.Mesh(
+      facing === "z"
+        ? new THREE.BoxGeometry(0.055, h, 0.05)
+        : new THREE.BoxGeometry(0.05, h, 0.055),
+      mat,
+    );
+    vert.position.copy(center);
+    this.engine.scene.add(vert);
+    const horiz = new THREE.Mesh(
+      facing === "z"
+        ? new THREE.BoxGeometry(w, 0.055, 0.05)
+        : new THREE.BoxGeometry(0.05, 0.055, w),
+      mat,
+    );
+    horiz.position.copy(center);
+    this.engine.scene.add(horiz);
+  }
+
+  /**
+   * Composition carpentry: dark door frames around every room doorway and
+   * low ceiling beams. Zero colliders (visual only). Frames turn each
+   * sightline into a framed vignette and give the corridor foreground
+   * occlusion; beams press the ceiling down on the player.
+   */
+  private buildFraming() {
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x18130e, roughness: 1 });
+    const add = (x: number, y: number, z: number, w: number, h: number, d: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), trimMat);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      this.engine.scene.add(m);
+    };
+
+    // Front door frame.
+    add(-0.85, 1.55, 0, 0.12, 3.1, 0.2);
+    add(0.85, 1.55, 0, 0.12, 3.1, 0.2);
+    add(0, 3.06, 0, 1.85, 0.14, 0.2);
+    // Entry -> living room doorway (gap z 4..6 at x=-1.8).
+    add(-1.8, 1.45, 4, 0.16, 2.9, 0.14);
+    add(-1.8, 1.45, 6, 0.16, 2.9, 0.14);
+    add(-1.8, 2.85, 5, 0.16, 0.16, 2.15);
+    // Spine -> kitchen doorway (gap z 7..9 at x=1.8).
+    add(1.8, 1.45, 7, 0.16, 2.9, 0.14);
+    add(1.8, 1.45, 9, 0.16, 2.9, 0.14);
+    add(1.8, 2.85, 8, 0.16, 0.16, 2.15);
+    // Hallway -> bathroom doorway (gap z 15..17 at x=1.8).
+    add(1.8, 1.45, 15, 0.16, 2.9, 0.14);
+    add(1.8, 1.45, 17, 0.16, 2.9, 0.14);
+    add(1.8, 2.85, 16, 0.16, 0.16, 2.15);
+
+    // Ceiling beams: living room + hallway.
+    add(-4.4, 3.02, 6.2, 5.2, 0.16, 0.2);
+    add(-4.4, 3.02, 8, 5.2, 0.16, 0.2);
+    add(0, 3.02, 13, 3.6, 0.16, 0.2);
+    add(0, 3.02, 16.6, 3.6, 0.16, 0.2);
   }
 
   private buildLivingRoom() {
@@ -686,6 +942,45 @@ export class FarmhouseScene {
     this.engine.scene.add(pane);
     this.lightningPanes.push(paneMat);
 
+    this.addMullions(new THREE.Vector3(-6.8, 1.9, 6), 1.2, 1.3, "x");
+
+    // A ragged curtain beside the window, swaying very slowly. Every door
+    // and window in this house is shut. It sways anyway.
+    const curtainGeo = new THREE.PlaneGeometry(0.55, 1.3, 1, 4);
+    curtainGeo.translate(0, -0.65, 0); // pivot at the rod
+    this.curtain = new THREE.Mesh(
+      curtainGeo,
+      new THREE.MeshStandardMaterial({
+        map: fabricTexture([56, 52, 48]),
+        roughness: 1,
+        side: THREE.DoubleSide,
+      }),
+    );
+    this.curtain.position.set(-6.72, 2.6, 6.8);
+    this.curtain.rotation.y = Math.PI / 2;
+    this.engine.scene.add(this.curtain);
+
+    // Crews two and three, told in equipment: a shed nitrile glove by the
+    // patient, and a whole county jump bag abandoned at the couch's end.
+    // Marcus never comments on either.
+    const glove = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.13, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0xcdd3d6, roughness: 0.95, side: THREE.DoubleSide }),
+    );
+    glove.rotation.x = -Math.PI / 2;
+    glove.rotation.z = 0.7;
+    glove.position.set(-3.8, 0.021, 5.25);
+    this.engine.scene.add(glove);
+
+    const lostBag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.2, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0x6e1414, roughness: 0.9 }),
+    );
+    lostBag.rotation.y = 0.5;
+    lostBag.position.set(-6.45, 0.1, 4.6);
+    lostBag.castShadow = true;
+    this.engine.scene.add(lostBag);
+
     // The moonbeam made visible: a volumetric shaft from the window down
     // across the patient — the room's composition anchor.
     this.moonbeamCone = createVolumetricCone(0x8fa4d0, 7.2, 1.5, 0.06);
@@ -708,7 +1003,10 @@ export class FarmhouseScene {
     this.engine.scene.add(counter);
     this.engine.collisionWorld.addFromMesh(counter);
 
-    // The fridge — its hum is a few cents flat (AudioManager.startFridge).
+    // The fridge — its hum is a few cents flat (AudioManager.startFridge),
+    // and its door hangs open a crack, leaking cold greenish light into a
+    // house with no power. The kitchen's identity is that spill: nobody
+    // in the game ever mentions it.
     const fridge = new THREE.Mesh(
       new THREE.BoxGeometry(0.8, 1.9, 0.8),
       new THREE.MeshStandardMaterial({ color: 0xb8b4a6, roughness: 0.6 }),
@@ -717,6 +1015,20 @@ export class FarmhouseScene {
     fridge.castShadow = true;
     this.engine.scene.add(fridge);
     this.engine.collisionWorld.addFromMesh(fridge);
+
+    const fridgeSlit = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, 1.5, 0.05),
+      new THREE.MeshStandardMaterial({
+        color: 0xd8ffe9,
+        emissive: 0xbfffdd,
+        emissiveIntensity: 1.3,
+      }),
+    );
+    fridgeSlit.position.set(5.99, 0.95, 6.36);
+    this.engine.scene.add(fridgeSlit);
+    this.fridgeLight = new THREE.PointLight(0xcfeede, 0, 3.6, 1.8);
+    this.fridgeLight.position.set(5.6, 0.9, 6.5);
+    this.engine.scene.add(this.fridgeLight);
 
     const table = new THREE.Mesh(
       new THREE.BoxGeometry(1.3, 0.5, 1.3),
@@ -891,6 +1203,38 @@ export class FarmhouseScene {
       prompt: "[E] Go upstairs",
       onInteract: () => this.gotoUpstairs(),
     });
+
+    // A small window above the stairs backlights the end of the corridor —
+    // the exact spot the Patient likes to stand. Anything there reads as a
+    // silhouette against cold glass, which is the whole point.
+    const stairPaneMat = this.makeRainGlassMaterial(0x46587e, 0.8);
+    const stairPane = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.95), stairPaneMat);
+    stairPane.position.set(0, 2.35, 19.83);
+    stairPane.rotation.y = Math.PI;
+    this.engine.scene.add(stairPane);
+    this.lightningPanes.push(stairPaneMat);
+    this.addMullions(new THREE.Vector3(0, 2.35, 19.8), 0.75, 0.95, "z");
+    const stairBack = new THREE.SpotLight(0x5b6f9e, 1.7, 10, 0.55, 0.6, 1.3);
+    stairBack.position.set(0, 2.4, 19.7);
+    const stairBackTarget = new THREE.Object3D();
+    stairBackTarget.position.set(0, 0.8, 13);
+    this.engine.scene.add(stairBackTarget);
+    stairBack.target = stairBackTarget;
+    this.engine.scene.add(stairBack);
+    this.lights.push(stairBack);
+
+    // Crew one's penlight: dropped, rolled against the baseboard, still on.
+    const pen = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.015, 0.13, 6),
+      new THREE.MeshStandardMaterial({ color: 0xd8d4c8, metalness: 0.5, roughness: 0.35 }),
+    );
+    pen.rotation.z = Math.PI / 2;
+    pen.rotation.y = 0.4;
+    pen.position.set(-1.15, 0.035, 13.4);
+    this.engine.scene.add(pen);
+    this.penLightPt = new THREE.PointLight(0xfff2cc, 0.5, 1.7, 2);
+    this.penLightPt.position.set(-1.38, 0.06, 13.32);
+    this.engine.scene.add(this.penLightPt);
   }
 
   private buildBathroom() {
@@ -951,6 +1295,20 @@ export class FarmhouseScene {
     tub.castShadow = true;
     this.engine.scene.add(tub);
     this.engine.collisionWorld.addFromMesh(tub);
+
+    // Bathroom identity: one small frosted pane, colder and greener than
+    // any other light in the house; porcelain and the mirror catch it.
+    const bathPaneMat = this.makeRainGlassMaterial(0x4a7480, 0.75);
+    const bathPane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.7), bathPaneMat);
+    bathPane.position.set(6.83, 1.9, 18.4);
+    bathPane.rotation.y = -Math.PI / 2;
+    this.engine.scene.add(bathPane);
+    this.lightningPanes.push(bathPaneMat);
+    this.addMullions(new THREE.Vector3(6.8, 1.9, 18.4), 0.6, 0.7, "x");
+    const bathGlow = new THREE.PointLight(0x7fa8b0, 0.4, 3.2, 2);
+    bathGlow.position.set(6.2, 1.8, 18.2);
+    this.engine.scene.add(bathGlow);
+    this.lights.push(bathGlow);
   }
 
   private buildUpstairs() {
@@ -1075,6 +1433,25 @@ export class FarmhouseScene {
     dustLight.position.set(UPSTAIRS_X + 2, 2.4, 6);
     this.engine.scene.add(dustLight);
     this.lights.push(dustLight);
+
+    // Sheeted furniture on the landing: someone closed this floor up
+    // properly, long before anyone stopped answering the phone.
+    const sheetMat = new THREE.MeshStandardMaterial({
+      map: fabricTexture([148, 146, 138]),
+      roughness: 1,
+    });
+    const sheetChair = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.9, 0.65), sheetMat);
+    sheetChair.position.set(UPSTAIRS_X - 2.6, 0.45, 2.2);
+    sheetChair.rotation.y = 0.35;
+    sheetChair.castShadow = true;
+    this.engine.scene.add(sheetChair);
+    this.engine.collisionWorld.addFromMesh(sheetChair);
+    const sheetTall = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.6, 0.35), sheetMat);
+    sheetTall.position.set(UPSTAIRS_X + 3.6, 0.8, 1.2);
+    sheetTall.rotation.y = -0.2;
+    sheetTall.castShadow = true;
+    this.engine.scene.add(sheetTall);
+    this.engine.collisionWorld.addFromMesh(sheetTall);
   }
 
   private buildBasement() {
@@ -1541,9 +1918,9 @@ export class FarmhouseScene {
           this.patient.disableStalking();
           this.patient.setMode("lying");
           this.patient.group.position.set(-4.5, 0, 6);
-          this.engine.player.setSpawn(-3.4, 6, Math.PI / 2);
           // Authored framing: Marcus is already looking down at it.
-          this.engine.player.pitch = -0.55;
+          this.engine.player.position.set(-3.4, 1.65, 6);
+          this.engine.player.snapLook(Math.PI / 2, -0.55);
           this.engine.player.movementEnabled = false;
           this.engine.player.requestLock();
           this.beginFinalPulseCheck();
@@ -1743,12 +2120,20 @@ export class FarmhouseScene {
     // Beacon idle pulse.
     this.beaconLight.intensity = 0.25 + Math.abs(Math.sin(performance.now() * 0.0016)) * 0.3;
 
-    // Lightning: flash first (window panes + the TV glass answer it),
-    // thunder arrives on a believable delay.
+    // Storm distance model: the storm walks closer over the demo's run,
+    // so flash brightness rises, thunder arrives faster, and the low
+    // rumble reads louder. Anchored to real-time seconds since scene load.
+    this.stormAge += dt;
+    const stormPhase = Math.min(1, this.stormAge / 300); // ~5min to peak
     this.lightningTimer -= dt;
     if (this.lightningTimer <= 0) {
-      this.lightningTimer = 14 + Math.random() * 22;
+      this.lightningTimer = 12 - stormPhase * 4 + Math.random() * (16 - stormPhase * 8);
       if (this.zone === "exterior" || this.zone === "porch" || Math.random() < 0.4) {
+        const closeStrike = Math.random() < 0.15 + stormPhase * 0.3;
+        const distanceKm = closeStrike ? 0.4 + Math.random() * 0.8 : 2 + Math.random() * 3.5;
+        const peakIntensity = closeStrike ? 6.2 : 3.6 + Math.random() * 1.2;
+        const thunderDelayMs = distanceKm * 2900 + Math.random() * 400;
+        const thunderVolume = Math.max(0.14, 0.6 - distanceKm * 0.12);
         const original = this.moon.intensity;
         const flash = (intensity: number, ms: number) => {
           this.moon.intensity = intensity;
@@ -1760,11 +2145,17 @@ export class FarmhouseScene {
             if (this.tvMat) this.tvMat.emissiveIntensity = 0;
           }, ms);
         };
-        flash(4.5, 140);
-        window.setTimeout(() => flash(3.2, 90), 260);
+        // Stage 1: subtle sky pre-flash. Stage 2: the strike. Stage 3: decay.
+        flash(original + 0.6, 60);
+        window.setTimeout(() => flash(peakIntensity, 130), 90);
+        window.setTimeout(() => flash(peakIntensity * 0.55, 100), 300);
+        // Close strikes occasionally reveal a figure at the tree line.
+        if (closeStrike && this.zone === "exterior" && Math.random() < 0.4) {
+          this.spawnLightningFigure();
+        }
         window.setTimeout(
-          () => this.engine.audio.thunder(),
-          350 + Math.random() * 1200,
+          () => this.engine.audio.thunder(thunderVolume),
+          thunderDelayMs,
         );
       }
     }
@@ -1798,6 +2189,47 @@ export class FarmhouseScene {
     this.beamCone.visible = this.engine.flashlight.on;
     this.beamDust.visible = this.engine.flashlight.on;
 
+    // Feed the rain shader the flashlight's world-space pose so drops
+    // brighten inside the beam without any lighting model.
+    {
+      const cam = this.engine.camera;
+      cam.getWorldPosition(this.rainUniforms.beamPos.value);
+      cam.getWorldDirection(this.rainUniforms.beamDir.value);
+      this.rainUniforms.beamActive.value = this.engine.flashlight.on ? 1 : 0;
+    }
+
+    // Splash spawning: only where the sky reaches (yard + porch). One or
+    // two per frame at most, drawn from a small pool.
+    if (this.zone === "exterior" || this.zone === "porch") {
+      if (Math.random() < 0.55) this.spawnSplash();
+    }
+    for (const s of this.splashes) {
+      s.age += dt;
+    }
+    this.splashes = this.splashes.filter((s) => s.age < 0.55);
+    for (let i = 0; i < this.splashPool.length; i++) {
+      const mesh = this.splashPool[i];
+      const s = this.splashes[i];
+      if (!s) { mesh.visible = false; continue; }
+      const t = s.age / 0.55;
+      const scale = 0.6 + t * 3.4;
+      mesh.visible = true;
+      mesh.position.copy(s.pos);
+      mesh.scale.set(scale, 1, scale);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.55;
+    }
+
+    // Lightning figure fade-out (independent of the flash so it can
+    // outlast the strike briefly, like a retinal afterimage).
+    if (this.lightningFigure) {
+      const mat = this.lightningFigure.material as THREE.MeshBasicMaterial;
+      mat.opacity -= dt * 1.3;
+      if (mat.opacity <= 0) {
+        this.engine.scene.remove(this.lightningFigure);
+        this.lightningFigure = null;
+      }
+    }
+
     // Beam dust drift (local space, recycled).
     {
       const positions = (this.beamDust.geometry as THREE.BufferGeometry)
@@ -1813,6 +2245,32 @@ export class FarmhouseScene {
     // Per-zone fog density eases toward its target.
     const fog = this.engine.scene.fog as THREE.FogExp2;
     fog.density += (this.fogTarget - fog.density) * Math.min(1, dt * 1.2);
+
+    // Fridge spill flickers to life shortly after entering the kitchen,
+    // and dies with a stutter on the way out — a fluorescent that's been
+    // failing for months.
+    {
+      const target = this.fridgeLightOn ? 1.5 + Math.sin(performance.now() * 0.017) * 0.15 : 0;
+      const k = Math.min(1, dt * 3.5);
+      this.fridgeLight.intensity += (target - this.fridgeLight.intensity) * k;
+      // Rare hard blink while on.
+      if (this.fridgeLightOn && Math.random() < 0.003) {
+        this.fridgeLight.intensity = 0.15;
+      }
+    }
+
+    // Curtain sway: tiny amplitude, low frequency. It should be
+    // perceptible only when the player pauses to look at it.
+    if (this.curtain) {
+      const t = performance.now() * 0.001;
+      this.curtain.rotation.z = Math.sin(t * 0.9) * 0.05
+        + Math.sin(t * 2.3) * 0.015;
+    }
+
+    // Penlight from crew one: pulsing slightly, dying batteries.
+    if (this.penLightPt) {
+      this.penLightPt.intensity = 0.4 + Math.sin(performance.now() * 0.004) * 0.08;
+    }
 
     this.horror.update(dt);
     this.updateZone();
@@ -1845,8 +2303,13 @@ export class FarmhouseScene {
     this.applyZoneRain();
     this.applyZoneAtmosphere(next);
 
-    if (next === "kitchen") this.engine.audio.startFridge();
-    else if (prev === "kitchen") this.engine.audio.stopFridge();
+    if (next === "kitchen") {
+      this.engine.audio.startFridge();
+      this.fridgeLightOn = true;
+    } else if (prev === "kitchen") {
+      this.engine.audio.stopFridge();
+      this.fridgeLightOn = false;
+    }
 
     // The basement's impossible bulb (and its shadow map) exists only
     // while the player is down there.

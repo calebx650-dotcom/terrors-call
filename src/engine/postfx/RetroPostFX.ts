@@ -26,11 +26,11 @@ const VhsCrtShader = {
   uniforms: {
     tDiffuse: { value: null },
     time: { value: 0 },
-    grainStrength: { value: 0.075 },
+    grainStrength: { value: 0.07 },
     ditherStrength: { value: 0.03 },
-    scanlineStrength: { value: 0.13 },
+    scanlineStrength: { value: 0.11 },
     scanlineCount: { value: 240.0 },
-    vignetteStrength: { value: 0.46 },
+    vignetteStrength: { value: 0.4 },
     stress: { value: 0.0 },
     trackingPhase: { value: -1.0 }, // y center of an active tracking band, <0 = none
     gradeLift: { value: new THREE.Vector3(0.02, 0.025, 0.04) },
@@ -164,7 +164,7 @@ export class RetroPostFX {
     this.composer.addPass(new RenderPass(scene, camera));
 
     // Subtle halation: high threshold so only true light sources bloom.
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.45, 0.6, 0.72);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.38, 0.55, 0.75);
     this.composer.addPass(this.bloom);
 
     this.pass = new ShaderPass(VhsCrtShader);

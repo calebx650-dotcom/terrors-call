@@ -7,6 +7,7 @@ const CROUCH_SPEED = 1.3;
 const STAND_EYE_HEIGHT = 1.65;
 const CROUCH_EYE_HEIGHT = 1.05;
 const MOUSE_SENSITIVITY = 0.0022;
+const TURN_INERTIA = 0.18; // 0 = snap, 1 = mush; tuned for "hand on a heavy head"
 const SPRINT_DRAIN_PER_SEC = 1 / 6; // empty after ~6s of sprinting
 const STAMINA_REGEN_PER_SEC = 1 / 11;
 
@@ -18,6 +19,9 @@ export class PlayerController {
   position = new THREE.Vector3(0, STAND_EYE_HEIGHT, 0);
   yaw = 0;
   pitch = 0;
+  // Raw look targets — the visible yaw/pitch chases these each frame.
+  private yawTarget = 0;
+  private pitchTarget = 0;
 
   /**
    * 0..1, never shown on screen — the brief bans a stamina bar. The player
@@ -86,15 +90,29 @@ export class PlayerController {
 
   private onMouseMove = (e: MouseEvent) => {
     if (!this.locked) return;
-    this.yaw -= e.movementX * MOUSE_SENSITIVITY;
-    this.pitch -= e.movementY * MOUSE_SENSITIVITY;
+    this.yawTarget -= e.movementX * MOUSE_SENSITIVITY;
+    this.pitchTarget -= e.movementY * MOUSE_SENSITIVITY;
     const limit = Math.PI / 2 - 0.05;
-    this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+    this.pitchTarget = Math.max(-limit, Math.min(limit, this.pitchTarget));
   };
 
   setSpawn(x: number, z: number, yaw = 0) {
     this.position.set(x, this.eyeHeight, z);
+    this.snapLook(yaw, 0);
+  }
+
+  /**
+   * Instantaneous look reset. Use this instead of writing `player.yaw`
+   * directly: the visible yaw/pitch chases private targets each frame for
+   * turn inertia, so writing only the visible field silently drifts back
+   * to a stale target. The rule is: mouse-look sets targets; scripted
+   * framing snaps both. (Kept as one method so no caller can forget half.)
+   */
+  snapLook(yaw: number, pitch = 0) {
     this.yaw = yaw;
+    this.pitch = pitch;
+    this.yawTarget = yaw;
+    this.pitchTarget = pitch;
   }
 
   /** Kicks off a decaying random camera jolt — used for impacts and scares. */
@@ -108,6 +126,12 @@ export class PlayerController {
     if (!this.movementEnabled) {
       this.keys = {};
     }
+
+    // Turn inertia: yaw/pitch chase their targets. Framerate-independent
+    // exponential smoothing so behavior doesn't change with fps.
+    const chase = 1 - Math.pow(TURN_INERTIA, dt * 60);
+    this.yaw += (this.yawTarget - this.yaw) * chase;
+    this.pitch += (this.pitchTarget - this.pitch) * chase;
 
     const forward = new THREE.Vector3(
       Math.sin(this.yaw),
