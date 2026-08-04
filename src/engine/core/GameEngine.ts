@@ -94,6 +94,14 @@ export class GameEngine {
     this.flashlight = new Flashlight(this.camera);
     this.scene.add(this.camera);
 
+    // Debug: Add a simple box to verify rendering works
+    const debugBox = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    debugBox.position.set(0, 1, 5);
+    this.scene.add(debugBox);
+
     this.interaction = new InteractionSystem(this.camera);
     this.postfx = new RetroPostFX(this.renderer, this.scene, this.camera);
     this.audio = new AudioManager();
